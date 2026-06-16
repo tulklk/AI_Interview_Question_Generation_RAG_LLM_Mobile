@@ -16,6 +16,7 @@ class NavItem {
   });
 }
 
+/// Floating glass bottom nav bar with animated active pill + glow indicator.
 class AppAnimatedBottomNav extends StatelessWidget {
   final int currentIndex;
   final List<NavItem> items;
@@ -31,32 +32,36 @@ class AppAnimatedBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(26),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
-            height: 64,
+            height: 66,
             decoration: BoxDecoration(
               color: isDark
-                  ? const Color(0xFF111827).withOpacity(0.92)
-                  : Colors.white.withOpacity(0.92),
-              borderRadius: BorderRadius.circular(24),
+                  ? const Color(0xFF111827).withValues(alpha: 0.93)
+                  : Colors.white.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(26),
               border: Border.all(
                 color: isDark
-                    ? AppColors.brandPurple.withOpacity(0.2)
-                    : AppColors.brandPurple.withOpacity(0.12),
+                    ? AppColors.brandPurple.withValues(alpha: 0.22)
+                    : AppColors.brandPurple.withValues(alpha: 0.10),
+                width: 1.0,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.brandPurple.withOpacity(0.15),
-                  blurRadius: 24,
+                  color: AppColors.brandPurple
+                      .withValues(alpha: isDark ? 0.20 : 0.14),
+                  blurRadius: 28,
+                  spreadRadius: -4,
                   offset: const Offset(0, 8),
                 ),
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
                   blurRadius: 16,
                   offset: const Offset(0, 4),
                 ),
@@ -69,48 +74,69 @@ class AppAnimatedBottomNav extends StatelessWidget {
                   child: GestureDetector(
                     onTap: () => onTap(i),
                     behavior: HitTestBehavior.opaque,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOutCubic,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
-                            width: isActive ? 44 : 28,
-                            height: 28,
-                            decoration: isActive
-                                ? BoxDecoration(
-                                    gradient: AppColors.primaryGradient,
-                                    borderRadius: BorderRadius.circular(10),
-                                  )
-                                : null,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // ── Icon container with pill + glow ──────────────
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.easeOutCubic,
+                          width: isActive ? 48 : 30,
+                          height: 30,
+                          decoration: isActive
+                              ? BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      AppColors.brandPurple,
+                                      AppColors.deepBlue,
+                                    ],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(11),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.brandPurple
+                                          .withValues(alpha: 0.50),
+                                      blurRadius: 12,
+                                      spreadRadius: -2,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                )
+                              : null,
+                          child: Center(
                             child: Icon(
                               isActive ? items[i].activeIcon : items[i].icon,
                               size: 18,
                               color: isActive
                                   ? Colors.white
                                   : (isDark
-                                      ? AppColors.white.withOpacity(0.45)
+                                      ? AppColors.white.withValues(alpha: 0.40)
                                       : AppColors.gray400),
                             ),
                           ),
-                          const SizedBox(height: 3),
-                          AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 200),
-                            style: AppTextStyles.caption.copyWith(
-                              color: isActive
-                                  ? AppColors.brandPurple
-                                  : (isDark
-                                      ? AppColors.white.withOpacity(0.4)
-                                      : AppColors.gray400),
-                              fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-                              fontSize: 10,
-                            ),
-                            child: Text(items[i].label),
+                        ),
+
+                        const SizedBox(height: 3),
+
+                        // ── Label ─────────────────────────────────────────
+                        AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 220),
+                          style: AppTextStyles.caption.copyWith(
+                            color: isActive
+                                ? AppColors.brandPurple
+                                : (isDark
+                                    ? AppColors.white.withValues(alpha: 0.38)
+                                    : AppColors.gray400),
+                            fontWeight: isActive
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                            fontSize: 10,
                           ),
-                        ],
-                      ),
+                          child: Text(items[i].label),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -119,6 +145,11 @@ class AppAnimatedBottomNav extends StatelessWidget {
           ),
         ),
       ),
-    ).animate().slideY(begin: 1, end: 0, duration: 400.ms, curve: Curves.easeOutCubic);
+    ).animate().slideY(
+          begin: 1.2,
+          end: 0,
+          duration: 420.ms,
+          curve: Curves.easeOutCubic,
+        );
   }
 }
