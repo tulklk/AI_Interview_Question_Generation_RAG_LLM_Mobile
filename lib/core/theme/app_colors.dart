@@ -4,9 +4,12 @@ class AppColors {
   AppColors._();
 
   // Brand Primary
-  static const Color brandPurple = Color(0xFF6C47FF);
-  static const Color deepBlue = Color(0xFF3B82F6);
-  static const Color purpleShadow = Color(0xFF7C3AED);
+  static const Color brandPurple    = Color(0xFF6C47FF);
+  static const Color primaryHover   = Color(0xFF5535DD);
+  static const Color accentViolet   = Color(0xFF7C3AED);
+  static const Color accentCyan     = Color(0xFF22D3EE);
+  static const Color deepBlue       = Color(0xFF3B82F6);
+  static const Color purpleShadow   = Color(0xFF7C3AED);
 
   // Accent
   static const Color magenta = Color(0xFFEC4899);
@@ -31,8 +34,8 @@ class AppColors {
   static const Color gray100 = Color(0xFFF3F4F6);
 
   // Borders
-  static Color cardBorder = const Color(0xFF7C3AED).withOpacity(0.12);
-  static Color formBorder = const Color(0xFF000000).withOpacity(0.1);
+  static Color cardBorder = const Color(0xFF7C3AED).withValues(alpha: 0.12);
+  static Color formBorder = const Color(0xFF000000).withValues(alpha: 0.1);
 
   // Dark mode surfaces
   static const Color darkBg = Color(0xFF0A0A14);
