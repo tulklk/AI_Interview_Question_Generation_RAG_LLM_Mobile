@@ -1,33 +1,160 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/models.dart';
 import '../mock/mock_data.dart';
+import '../services/auth_service.dart';
+import '../services/storage_service.dart';
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 
 class AuthState {
   final UserModel? user;
   final bool isLoading;
-  AuthState({this.user, this.isLoading = false});
-  AuthState copyWith({UserModel? user, bool? isLoading}) =>
-      AuthState(user: user ?? this.user, isLoading: isLoading ?? this.isLoading);
+  final String? error;
+  final AuthErrorType? errorType;
+
+  const AuthState({
+    this.user,
+    this.isLoading = false,
+    this.error,
+    this.errorType,
+  });
+
+  AuthState copyWith({
+    UserModel? user,
+    bool? isLoading,
+    String? error,
+    AuthErrorType? errorType,
+    bool clearError = false,
+  }) =>
+      AuthState(
+        user: user ?? this.user,
+        isLoading: isLoading ?? this.isLoading,
+        error: clearError ? null : (error ?? this.error),
+        errorType: clearError ? null : (errorType ?? this.errorType),
+      );
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(AuthState());
-
-  Future<void> loginAsHR() async {
-    state = state.copyWith(isLoading: true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    state = AuthState(user: MockData.hrUser);
+  AuthNotifier() : super(const AuthState()) {
+    _tryRestoreSession();
   }
 
-  Future<void> loginAsCandidate() async {
-    state = state.copyWith(isLoading: true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    state = AuthState(user: MockData.candidateUser);
+  // Restore session from SharedPreferences on app start
+  Future<void> _tryRestoreSession() async {
+    final session = await StorageService.getSavedSession();
+    if (session == null || !mounted) return;
+    final role = _roleFromString(session['userRole'] ?? '');
+    state = AuthState(
+      user: UserModel(
+        id: session['userId']!,
+        name: session['userName']!,
+        email: session['userEmail']!,
+        role: role,
+      ),
+    );
   }
 
-  void logout() => state = AuthState();
+  // ── Email / password ──────────────────────────────────────────────────
+
+  Future<void> login(String email, String password) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final result = await AuthService.loginWithEmail(email, password);
+      await StorageService.saveSession(
+        accessToken:  result.accessToken,
+        refreshToken: result.refreshToken,
+        userId:       result.user.id,
+        userRole:     result.user.role.name,
+        userName:     result.user.name,
+        userEmail:    result.user.email,
+      );
+      if (mounted) state = AuthState(user: result.user);
+    } on AuthException catch (e) {
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          error: e.message,
+          errorType: e.type,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Có lỗi xảy ra. Vui lòng thử lại sau.',
+          errorType: AuthErrorType.serverError,
+        );
+      }
+    }
+  }
+
+  // ── Google OAuth ──────────────────────────────────────────────────────
+
+  Future<void> loginWithGoogle(String idToken) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final result = await AuthService.loginWithGoogle(idToken);
+      await StorageService.saveSession(
+        accessToken:  result.accessToken,
+        refreshToken: result.refreshToken,
+        userId:       result.user.id,
+        userRole:     result.user.role.name,
+        userName:     result.user.name,
+        userEmail:    result.user.email,
+      );
+      if (mounted) state = AuthState(user: result.user);
+    } on AuthException catch (e) {
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          error: e.message,
+          errorType: e.type,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Đăng nhập Google thất bại. Vui lòng thử lại.',
+          errorType: AuthErrorType.serverError,
+        );
+      }
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────
+
+  void clearError() {
+    if (state.error != null) state = state.copyWith(clearError: true);
+  }
+
+  void setError(String message, [AuthErrorType type = AuthErrorType.serverError]) {
+    state = state.copyWith(
+      isLoading: false,
+      error: message,
+      errorType: type,
+    );
+  }
+
+  void updateUser(UserModel user) {
+    state = state.copyWith(user: user);
+  }
+
+  Future<void> logout() async {
+    await StorageService.clearSession();
+    state = const AuthState();
+  }
+
+  static UserRole _roleFromString(String s) {
+    switch (s) {
+      case 'admin':
+        return UserRole.admin;
+      case 'hrManager':
+        return UserRole.hrManager;
+      default:
+        return UserRole.candidate;
+    }
+  }
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
