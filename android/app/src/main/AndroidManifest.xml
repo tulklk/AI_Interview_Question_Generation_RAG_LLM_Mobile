@@ -21,6 +21,10 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- TextureView dễ tương thích hơn SurfaceView trên một số cấu hình emulator -->
+            <meta-data
+              android:name="io.flutter.embedding.android.FlutterActivityRenderMode"
+              android:value="texture" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -31,6 +35,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Tắt Impeller: OpenGLES Impeller trên x86_64 emulator gây màn hình đen hoàn toàn.
+             Flutter đọc flag này ở application level, không phải activity level. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
