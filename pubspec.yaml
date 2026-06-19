@@ -34,6 +34,9 @@ dependencies:
   # HTTP
   dio: ^5.4.3+1
 
+  # Auth
+  google_sign_in: ^6.2.1
+
   # Utils
   shared_preferences: ^2.3.0
   intl: ^0.19.0
