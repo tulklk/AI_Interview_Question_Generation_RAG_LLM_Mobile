@@ -8,148 +8,352 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_avatar.dart';
 import '../../../core/widgets/app_elevated_card.dart';
 import '../../../core/widgets/app_gradient_button.dart';
+import '../../../core/widgets/app_text_field.dart';
 import '../../../data/providers/app_providers.dart';
+import '../../../data/services/profile_service.dart';
+import '../../../data/services/storage_service.dart';
 
-class HRProfileScreen extends ConsumerWidget {
+class HRProfileScreen extends ConsumerStatefulWidget {
   const HRProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider).user!;
+  ConsumerState<HRProfileScreen> createState() => _HRProfileScreenState();
+}
+
+class _HRProfileScreenState extends ConsumerState<HRProfileScreen> {
+  final _profileFormKey = GlobalKey<FormState>();
+  final _pwFormKey      = GlobalKey<FormState>();
+
+  final _nameCtrl      = TextEditingController();
+  final _phoneCtrl     = TextEditingController();
+  final _companyCtrl   = TextEditingController();
+  final _titleCtrl     = TextEditingController();
+  final _curPwCtrl     = TextEditingController();
+  final _newPwCtrl     = TextEditingController();
+  final _confirmPwCtrl = TextEditingController();
+
+  bool _isEditing   = false;
+  bool _isSaving    = false;
+  bool _isSavingPw  = false;
+  bool _showCurPw   = false;
+  bool _showNewPw   = false;
+  bool _showConfPw  = false;
+  String? _profileMsg;
+  bool _profileSuccess = false;
+  String? _pwMsg;
+  bool _pwSuccess = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _populateFromUser();
+  }
+
+  void _populateFromUser() {
+    final user = ref.read(authProvider).user;
+    if (user == null) return;
+    _nameCtrl.text    = user.name;
+    _phoneCtrl.text   = user.phone    ?? '';
+    _companyCtrl.text = user.company  ?? '';
+    _titleCtrl.text   = user.title    ?? '';
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _companyCtrl.dispose();
+    _titleCtrl.dispose();
+    _curPwCtrl.dispose();
+    _newPwCtrl.dispose();
+    _confirmPwCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_profileFormKey.currentState!.validate()) return;
+    setState(() { _isSaving = true; _profileMsg = null; });
+    try {
+      final token = await StorageService.getAccessToken();
+      if (token == null || token.isEmpty) throw ProfileException('Phiên đăng nhập hết hạn.');
+      await ProfileService.updateHRProfile(
+        token:    token,
+        fullName: _nameCtrl.text.trim(),
+        phone:    _phoneCtrl.text.trim(),
+        company:  _companyCtrl.text.trim(),
+        jobTitle: _titleCtrl.text.trim(),
+      );
+      final user = ref.read(authProvider).user!;
+      ref.read(authProvider.notifier).updateUser(user.copyWith(
+        name:    _nameCtrl.text.trim(),
+        phone:   _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+        company: _companyCtrl.text.trim().isEmpty ? null : _companyCtrl.text.trim(),
+        title:   _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
+      ));
+      if (!mounted) return;
+      setState(() { _isEditing = false; _profileSuccess = true; _profileMsg = 'Hồ sơ đã được cập nhật thành công.'; });
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() { _profileMsg = null; _profileSuccess = false; });
+      });
+    } on ProfileException catch (e) {
+      if (mounted) setState(() { _profileSuccess = false; _profileMsg = e.message; });
+    } catch (_) {
+      if (mounted) setState(() { _profileSuccess = false; _profileMsg = 'Có lỗi xảy ra. Vui lòng thử lại.'; });
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _savePassword() async {
+    if (!_pwFormKey.currentState!.validate()) return;
+    setState(() { _isSavingPw = true; _pwMsg = null; });
+    try {
+      final token = await StorageService.getAccessToken();
+      if (token == null || token.isEmpty) throw ProfileException('Phiên đăng nhập hết hạn.');
+      await ProfileService.changePassword(
+        token:           token,
+        currentPassword: _curPwCtrl.text,
+        newPassword:     _newPwCtrl.text,
+      );
+      _curPwCtrl.clear();
+      _newPwCtrl.clear();
+      _confirmPwCtrl.clear();
+      if (!mounted) return;
+      setState(() { _pwSuccess = true; _pwMsg = 'Mật khẩu đã được thay đổi thành công.'; });
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() { _pwMsg = null; _pwSuccess = false; });
+      });
+    } on ProfileException catch (e) {
+      if (mounted) setState(() { _pwSuccess = false; _pwMsg = e.message; });
+    } catch (_) {
+      if (mounted) setState(() { _pwSuccess = false; _pwMsg = 'Có lỗi xảy ra. Vui lòng thử lại.'; });
+    } finally {
+      if (mounted) setState(() => _isSavingPw = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user   = ref.watch(authProvider).user!;
     final isDark = ref.watch(themeProvider);
-    final isCurrentlyDark = Theme.of(context).brightness == Brightness.dark;
+    final theme  = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isCurrentlyDark ? AppColors.darkBg : AppColors.offWhite,
+      backgroundColor: theme ? AppColors.darkBg : AppColors.offWhite,
       body: CustomScrollView(
         slivers: [
+          // ── Header ──────────────────────────────────────────────────────
           SliverToBoxAdapter(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isCurrentlyDark
-                      ? [AppColors.darkSurface, AppColors.darkBg]
-                      : [AppColors.violetWash, AppColors.offWhite],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      AppAvatar(name: user.name, size: 88, showRing: true)
-                          .animate().scale(duration: 400.ms, curve: Curves.elasticOut),
-                      const SizedBox(height: 16),
-                      Text(user.name,
-                          style: AppTextStyles.h2.copyWith(
-                              color: isCurrentlyDark ? AppColors.white : AppColors.nearBlack))
-                          .animate().fadeIn(delay: 100.ms),
-                      const SizedBox(height: 4),
-                      Text(user.title ?? 'HR Manager',
-                          style: AppTextStyles.body.copyWith(
-                              color: AppColors.brandPurple, fontWeight: FontWeight.w600))
-                          .animate().fadeIn(delay: 150.ms),
-                      const SizedBox(height: 4),
-                      Text(user.company ?? 'FPT Software',
-                          style: AppTextStyles.caption.copyWith(color: AppColors.gray500))
-                          .animate().fadeIn(delay: 180.ms),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _StatPill(label: 'Jobs', value: '5'),
-                          const SizedBox(width: 12),
-                          _StatPill(label: 'Candidates', value: '10'),
-                          const SizedBox(width: 12),
-                          _StatPill(label: 'Hires', value: '3'),
-                        ],
-                      ).animate().fadeIn(delay: 220.ms),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            child: _ProfileHeader(user: user, isDark: theme),
           ),
+
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                _ProfileSection(
-                  title: 'Account',
-                  isDark: isCurrentlyDark,
-                  items: [
-                    _ProfileItem(
-                      icon: PhosphorIconsBold.user,
-                      label: 'Edit Profile',
-                      onTap: () {},
-                    ),
-                    _ProfileItem(
-                      icon: PhosphorIconsBold.building,
-                      label: 'Company Profile',
-                      subtitle: user.company,
-                      onTap: () {},
-                    ),
-                    _ProfileItem(
-                      icon: PhosphorIconsBold.users,
-                      label: 'Team Members',
-                      onTap: () {},
-                    ),
-                  ],
-                ).animate().fadeIn(delay: 200.ms),
+
+                // Success / error banner (profile)
+                if (_profileMsg != null)
+                  _MessageBanner(message: _profileMsg!, success: _profileSuccess)
+                      .animate().fadeIn(duration: 250.ms).slideY(begin: -0.2, end: 0),
+                if (_profileMsg != null) const SizedBox(height: 12),
+
+                // ── Profile info / edit form ───────────────────────────
+                AppElevatedCard(
+                  interactive: false,
+                  accentColor: AppColors.brandPurple,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Section header
+                      Row(children: [
+                        _SectionIcon(
+                          icon: PhosphorIconsBold.identificationCard,
+                          gradient: AppColors.primaryGradient,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text('Thông tin hồ sơ',
+                              style: AppTextStyles.h4.copyWith(
+                                  color: theme ? AppColors.white : AppColors.nearBlack)),
+                        ),
+                        if (!_isEditing)
+                          _EditButton(onTap: () => setState(() => _isEditing = true)),
+                      ]),
+                      const SizedBox(height: 16),
+
+                      if (!_isEditing) ...[
+                        _InfoRow(label: 'Email', value: user.email, isDark: theme, locked: true),
+                        _InfoRow(label: 'Họ tên', value: user.name.isEmpty ? '—' : user.name, isDark: theme),
+                        _InfoRow(label: 'Số điện thoại', value: user.phone ?? '—', isDark: theme),
+                        _InfoRow(label: 'Công ty', value: user.company ?? '—', isDark: theme),
+                        _InfoRow(label: 'Chức danh', value: user.title ?? '—', isDark: theme, last: true),
+                      ] else ...[
+                        Form(
+                          key: _profileFormKey,
+                          child: Column(children: [
+                            AppTextField(
+                              label: 'Họ tên *',
+                              hint: 'Nguyễn Văn A',
+                              controller: _nameCtrl,
+                              validator: (v) =>
+                                  (v?.trim().isEmpty ?? true) ? 'Vui lòng nhập họ tên' : null,
+                            ),
+                            const SizedBox(height: 12),
+                            AppTextField(
+                              label: 'Số điện thoại',
+                              hint: '+84 xxx xxx xxx',
+                              controller: _phoneCtrl,
+                              keyboardType: TextInputType.phone,
+                            ),
+                            const SizedBox(height: 12),
+                            AppTextField(
+                              label: 'Tên công ty',
+                              hint: 'FPT Software',
+                              controller: _companyCtrl,
+                            ),
+                            const SizedBox(height: 12),
+                            AppTextField(
+                              label: 'Chức danh',
+                              hint: 'Senior HR Manager',
+                              controller: _titleCtrl,
+                            ),
+                          ]),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(children: [
+                          Expanded(
+                            child: _OutlineButton(
+                              label: 'Hủy',
+                              onTap: () {
+                                _populateFromUser();
+                                setState(() { _isEditing = false; _profileMsg = null; });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: AppGradientButton(
+                              label: 'Lưu',
+                              isLoading: _isSaving,
+                              onTap: _isSaving ? null : _saveProfile,
+                              height: 46,
+                            ),
+                          ),
+                        ]),
+                      ],
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 80.ms),
                 const SizedBox(height: 16),
-                _ProfileSection(
-                  title: 'Preferences',
-                  isDark: isCurrentlyDark,
-                  items: [
-                    _ProfileItem(
-                      icon: PhosphorIconsBold.bell,
-                      label: 'Notifications',
-                      onTap: () {},
-                    ),
-                    _SwitchItem(
+
+                // ── Change password ───────────────────────────────────
+                AppElevatedCard(
+                  interactive: false,
+                  accentColor: AppColors.deepBlue,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        _SectionIcon(
+                          icon: PhosphorIconsBold.lockKey,
+                          gradient: const LinearGradient(
+                              colors: [Color(0xFF3B82F6), Color(0xFF6C47FF)]),
+                        ),
+                        const SizedBox(width: 10),
+                        Text('Đổi mật khẩu',
+                            style: AppTextStyles.h4.copyWith(
+                                color: theme ? AppColors.white : AppColors.nearBlack)),
+                      ]),
+                      const SizedBox(height: 16),
+                      if (_pwMsg != null) ...[
+                        _MessageBanner(message: _pwMsg!, success: _pwSuccess),
+                        const SizedBox(height: 12),
+                      ],
+                      Form(
+                        key: _pwFormKey,
+                        child: Column(children: [
+                          AppTextField(
+                            label: 'Mật khẩu hiện tại *',
+                            hint: '••••••••',
+                            controller: _curPwCtrl,
+                            obscureText: !_showCurPw,
+                            suffix: _EyeToggle(
+                                show: _showCurPw,
+                                onToggle: () => setState(() => _showCurPw = !_showCurPw)),
+                            validator: (v) =>
+                                (v?.isEmpty ?? true) ? 'Vui lòng nhập mật khẩu hiện tại' : null,
+                          ),
+                          const SizedBox(height: 12),
+                          AppTextField(
+                            label: 'Mật khẩu mới *',
+                            hint: '••••••••',
+                            controller: _newPwCtrl,
+                            obscureText: !_showNewPw,
+                            suffix: _EyeToggle(
+                                show: _showNewPw,
+                                onToggle: () => setState(() => _showNewPw = !_showNewPw)),
+                            validator: (v) {
+                              if (v?.isEmpty ?? true) return 'Vui lòng nhập mật khẩu mới';
+                              if (v!.length < 6) return 'Tối thiểu 6 ký tự';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          AppTextField(
+                            label: 'Xác nhận mật khẩu mới *',
+                            hint: '••••••••',
+                            controller: _confirmPwCtrl,
+                            obscureText: !_showConfPw,
+                            suffix: _EyeToggle(
+                                show: _showConfPw,
+                                onToggle: () => setState(() => _showConfPw = !_showConfPw)),
+                            validator: (v) =>
+                                v != _newPwCtrl.text ? 'Mật khẩu xác nhận không khớp' : null,
+                          ),
+                        ]),
+                      ),
+                      const SizedBox(height: 16),
+                      AppGradientButton(
+                        label: 'Đổi mật khẩu',
+                        isLoading: _isSavingPw,
+                        onTap: _isSavingPw ? null : _savePassword,
+                        height: 46,
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 150.ms),
+                const SizedBox(height: 16),
+
+                // ── Settings ─────────────────────────────────────────
+                AppElevatedCard(
+                  interactive: false,
+                  child: Column(children: [
+                    _SettingsRow(
                       icon: PhosphorIconsBold.moon,
                       label: 'Dark Mode',
-                      value: isDark,
-                      onChanged: (v) =>
-                          ref.read(themeProvider.notifier).state = v,
+                      gradient: const LinearGradient(
+                          colors: [Color(0xFF6C47FF), Color(0xFF3B82F6)]),
+                      isDark: theme,
+                      trailing: Switch.adaptive(
+                        value: isDark,
+                        onChanged: (v) => ref.read(themeProvider.notifier).state = v,
+                        activeThumbColor: Colors.white,
+                        activeTrackColor: AppColors.brandPurple,
+                      ),
                     ),
-                    _ProfileItem(
-                      icon: PhosphorIconsBold.globe,
-                      label: 'Language',
-                      subtitle: 'English',
-                      onTap: () {},
-                    ),
-                  ],
-                ).animate().fadeIn(delay: 250.ms),
-                const SizedBox(height: 16),
-                _ProfileSection(
-                  title: 'Support',
-                  isDark: isCurrentlyDark,
-                  items: [
-                    _ProfileItem(
-                      icon: PhosphorIconsBold.question,
-                      label: 'Help & FAQ',
-                      onTap: () {},
-                    ),
-                    _ProfileItem(
-                      icon: PhosphorIconsBold.shieldCheck,
-                      label: 'Privacy Policy',
-                      onTap: () {},
-                    ),
-                  ],
-                ).animate().fadeIn(delay: 300.ms),
+                  ]),
+                ).animate().fadeIn(delay: 210.ms),
                 const SizedBox(height: 24),
+
                 AppGradientButton(
-                  label: 'Sign Out',
+                  label: 'Đăng xuất',
                   onTap: () {
                     ref.read(authProvider.notifier).logout();
                     context.go('/login');
                   },
                   height: 52,
-                ).animate().fadeIn(delay: 350.ms),
+                ).animate().fadeIn(delay: 260.ms),
               ]),
             ),
           ),
@@ -159,134 +363,309 @@ class HRProfileScreen extends ConsumerWidget {
   }
 }
 
-class _StatPill extends StatelessWidget {
-  final String label;
-  final String value;
-  const _StatPill({required this.label, required this.value});
+// ── Profile header ────────────────────────────────────────────────────────────
+
+class _ProfileHeader extends StatelessWidget {
+  final dynamic user;
+  final bool isDark;
+  const _ProfileHeader({required this.user, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder),
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF0F1629), const Color(0xFF080A16)]
+              : [const Color(0xFFEEEAFF), AppColors.offWhite],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
       ),
-      child: Column(children: [
-        Text(value, style: AppTextStyles.h3.copyWith(
-            color: AppColors.brandPurple, fontSize: 20)),
-        Text(label, style: AppTextStyles.caption),
-      ]),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+          child: Column(children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppColors.primaryGradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brandPurple.withValues(alpha: 0.38),
+                    blurRadius: 24,
+                    spreadRadius: -4,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                    shape: BoxShape.circle, color: Colors.white),
+                child: AppAvatar(name: user.name, size: 82, showRing: false),
+              ),
+            ).animate().scale(duration: 400.ms, curve: Curves.elasticOut),
+            const SizedBox(height: 14),
+            Text(
+              user.name.isEmpty ? 'HR Manager' : user.name,
+              style: AppTextStyles.h2.copyWith(
+                  color: isDark ? AppColors.white : AppColors.nearBlack),
+            ).animate().fadeIn(delay: 100.ms),
+            const SizedBox(height: 4),
+            Text(
+              user.title ?? 'HR Manager',
+              style: AppTextStyles.body
+                  .copyWith(color: AppColors.brandPurple, fontWeight: FontWeight.w600),
+            ).animate().fadeIn(delay: 140.ms),
+            const SizedBox(height: 2),
+            Text(
+              user.email,
+              style: AppTextStyles.caption.copyWith(color: AppColors.gray500),
+            ).animate().fadeIn(delay: 170.ms),
+          ]),
+        ),
+      ),
     );
   }
 }
 
-class _ProfileSection extends StatelessWidget {
-  final String title;
-  final List<Widget> items;
-  final bool isDark;
-  const _ProfileSection(
-      {required this.title, required this.items, required this.isDark});
+// ── Shared sub-widgets ────────────────────────────────────────────────────────
+
+class _SectionIcon extends StatelessWidget {
+  final IconData icon;
+  final Gradient gradient;
+  const _SectionIcon({required this.icon, required this.gradient});
 
   @override
-  Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10, left: 4),
-        child: Text(title,
-            style: AppTextStyles.overline.copyWith(
-                color: isDark ? AppColors.white.withOpacity(0.4) : AppColors.gray400,
-                letterSpacing: 1.5)),
-      ),
-      AppElevatedCard(
-        interactive: false,
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: items
-              .expand((w) => [w, if (w != items.last) const Divider(height: 1, indent: 56)])
-              .toList(),
+  Widget build(BuildContext context) => Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.brandPurple.withValues(alpha: 0.25),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-      ),
-    ]);
-  }
+        child: Icon(icon, size: 15, color: Colors.white),
+      );
 }
 
-class _ProfileItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String? subtitle;
+class _EditButton extends StatelessWidget {
   final VoidCallback onTap;
-  const _ProfileItem(
-      {required this.icon, required this.label, this.subtitle, required this.onTap});
+  const _EditButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.brandPurple.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.brandPurple.withValues(alpha: isDark ? 0.4 : 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
             ),
-            child: Icon(icon, size: 17, color: AppColors.brandPurple),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: AppTextStyles.label.copyWith(
-                  color: isDark ? AppColors.white : AppColors.nearBlack)),
-              if (subtitle != null)
-                Text(subtitle!, style: AppTextStyles.caption),
-            ],
-          )),
-          Icon(PhosphorIconsBold.caretRight, size: 14, color: AppColors.gray400),
+          ],
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(PhosphorIconsBold.pencilSimple, size: 12, color: Colors.white),
+          const SizedBox(width: 5),
+          Text('Chỉnh sửa',
+              style: AppTextStyles.caption.copyWith(
+                  color: Colors.white, fontWeight: FontWeight.w600)),
         ]),
       ),
     );
   }
 }
 
-class _SwitchItem extends StatelessWidget {
-  final IconData icon;
+class _OutlineButton extends StatelessWidget {
   final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  const _SwitchItem(
-      {required this.icon, required this.label, required this.value,
-        required this.onChanged});
+  final VoidCallback onTap;
+  const _OutlineButton({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(children: [
-        Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            color: AppColors.brandPurple.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? AppColors.gray500 : AppColors.gray200,
           ),
-          child: Icon(icon, size: 17, color: AppColors.brandPurple),
         ),
-        const SizedBox(width: 14),
-        Expanded(child: Text(label, style: AppTextStyles.label.copyWith(
-            color: isDark ? AppColors.white : AppColors.nearBlack))),
-        Switch.adaptive(
-          value: value,
-          onChanged: onChanged,
-          activeColor: AppColors.brandPurple,
+        child: Center(
+          child: Text(label,
+              style: AppTextStyles.buttonText.copyWith(
+                  color: isDark ? AppColors.white : AppColors.nearBlack)),
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool isDark;
+  final bool locked;
+  final bool last;
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    required this.isDark,
+    this.locked = false,
+    this.last = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(
+            width: 110,
+            child: Text(label, style: AppTextStyles.caption.copyWith(fontSize: 12)),
+          ),
+          Expanded(
+            child: Row(children: [
+              Flexible(
+                child: Text(
+                  value,
+                  style: AppTextStyles.label.copyWith(
+                    color: isDark ? AppColors.white : AppColors.nearBlack,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (locked) ...[
+                const SizedBox(width: 6),
+                Icon(PhosphorIconsBold.lockSimple,
+                    size: 11,
+                    color: AppColors.gray400),
+              ],
+            ]),
+          ),
+        ]),
+        if (!last) ...[
+          const SizedBox(height: 8),
+          Divider(
+            height: 1,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : AppColors.gray200.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _MessageBanner extends StatelessWidget {
+  final String message;
+  final bool success;
+  const _MessageBanner({required this.message, required this.success});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = success ? AppColors.teal : AppColors.error;
+    final icon  = success ? PhosphorIconsBold.checkCircle : PhosphorIconsBold.warningCircle;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(message,
+              style: AppTextStyles.caption.copyWith(
+                  color: color, fontWeight: FontWeight.w600)),
         ),
       ]),
     );
   }
 }
+
+class _EyeToggle extends StatelessWidget {
+  final bool show;
+  final VoidCallback onToggle;
+  const _EyeToggle({required this.show, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+        icon: Icon(
+          show ? PhosphorIconsBold.eyeSlash : PhosphorIconsBold.eye,
+          size: 18,
+          color: AppColors.gray400,
+        ),
+        onPressed: onToggle,
+      );
+}
+
+class _SettingsRow extends StatelessWidget {
+  final IconData icon;
+  final Gradient gradient;
+  final String label;
+  final bool isDark;
+  final Widget trailing;
+  const _SettingsRow({
+    required this.icon,
+    required this.gradient,
+    required this.label,
+    required this.isDark,
+    required this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              gradient: gradient,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.brandPurple.withValues(alpha: 0.25),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(icon, size: 16, color: Colors.white),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(label,
+                style: AppTextStyles.label.copyWith(
+                    color: isDark ? AppColors.white : AppColors.nearBlack)),
+          ),
+          trailing,
+        ]),
+      );
+}
+
