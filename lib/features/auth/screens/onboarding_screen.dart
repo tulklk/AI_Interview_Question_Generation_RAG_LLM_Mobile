@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../data/services/storage_service.dart';
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -158,7 +159,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         curve: Curves.easeOutCubic,
       );
     } else {
-      context.go('/role');
+      StorageService.markOnboardingSeen();
+      context.go('/login');
     }
   }
 
@@ -240,7 +242,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     alignment: Alignment.centerRight,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(0, 12, 20, 0),
-                      child: _SkipButton(onTap: () => context.go('/role')),
+                      child: _SkipButton(onTap: () {
+                    StorageService.markOnboardingSeen();
+                    context.go('/login');
+                  }),
                     ),
                   ),
 

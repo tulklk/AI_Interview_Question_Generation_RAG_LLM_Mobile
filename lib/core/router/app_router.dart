@@ -6,9 +6,11 @@ import '../../data/providers/app_providers.dart';
 import '../../models/user_model.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/onboarding_screen.dart';
-import '../../features/auth/screens/role_selection_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
+import '../../features/auth/screens/forgot_password_screen.dart';
+import '../../features/auth/screens/reset_password_screen.dart';
+import '../../features/auth/screens/email_verification_screen.dart';
 import '../../features/hr/screens/hr_shell.dart';
 import '../../features/hr/screens/hr_dashboard_screen.dart';
 import '../../features/hr/screens/jobs_screen.dart';
@@ -27,8 +29,8 @@ import '../../features/candidate/screens/practice_question_screen.dart';
 import '../../features/candidate/screens/applications_screen.dart';
 import '../../features/candidate/screens/candidate_profile_screen.dart';
 
-final _rootKey = GlobalKey<NavigatorState>();
-final _hrShellKey = GlobalKey<NavigatorState>();
+final _rootKey           = GlobalKey<NavigatorState>();
+final _hrShellKey        = GlobalKey<NavigatorState>();
 final _candidateShellKey = GlobalKey<NavigatorState>();
 
 // Notifies GoRouter whenever auth state changes — without recreating the router.
@@ -39,45 +41,67 @@ class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
 }
 
+String _homeForRole(UserRole role) {
+  switch (role) {
+    case UserRole.admin:
+    case UserRole.hrManager:
+      return '/hr';
+    case UserRole.candidate:
+      return '/candidate';
+  }
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterNotifier(ref);
 
   return GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/splash',
-    refreshListenable: notifier, // re-evaluates redirect on auth change
+    refreshListenable: notifier,
     redirect: (context, state) {
-      final auth = ref.read(authProvider);
+      final auth     = ref.read(authProvider);
       final isLoggedIn = auth.user != null;
-      final loc = state.matchedLocation;
+      final loc      = state.matchedLocation;
 
       final isOnAuth = loc.startsWith('/splash') ||
           loc.startsWith('/onboarding') ||
-          loc.startsWith('/role') ||
           loc.startsWith('/login') ||
-          loc.startsWith('/register');
+          loc.startsWith('/register') ||
+          loc.startsWith('/forgot-password') ||
+          loc.startsWith('/reset-password') ||
+          loc.startsWith('/verify-email');
 
       // Not logged in → protect all non-auth routes
       if (!isLoggedIn && !isOnAuth) return '/splash';
 
-      // Already logged in but still on login / role / register → go home
+      // Already logged in but on an auth-only screen → go to dashboard
       if (isLoggedIn &&
-          (loc.startsWith('/login') ||
-              loc.startsWith('/role') ||
-              loc.startsWith('/register'))) {
-        return auth.user!.role == UserRole.hrManager ? '/hr' : '/candidate';
+          (loc.startsWith('/login') || loc.startsWith('/register'))) {
+        return _homeForRole(auth.user!.role);
       }
 
       return null;
     },
     routes: [
-      GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
-      GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
-      GoRoute(path: '/role', builder: (_, __) => const RoleSelectionScreen()),
-      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
+      GoRoute(path: '/splash',          builder: (_, __) => const SplashScreen()),
+      GoRoute(path: '/onboarding',      builder: (_, __) => const OnboardingScreen()),
+      GoRoute(path: '/login',           builder: (_, __) => const LoginScreen()),
+      GoRoute(path: '/register',        builder: (_, __) => const RegisterScreen()),
+      GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
+      GoRoute(
+        path: '/reset-password',
+        builder: (_, state) => ResetPasswordScreen(
+          token: state.uri.queryParameters['token'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (_, state) => EmailVerificationScreen(
+          email: state.uri.queryParameters['email'] ?? '',
+        ),
+      ),
 
-      // ── HR Shell ──────────────────────────────────────────────────────────
+      // ── HR Shell (also used for Admin) ────────────────────────────────────
       ShellRoute(
         navigatorKey: _hrShellKey,
         builder: (_, __, child) => HRShell(child: child),

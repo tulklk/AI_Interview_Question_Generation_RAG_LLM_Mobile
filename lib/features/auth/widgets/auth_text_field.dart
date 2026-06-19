@@ -122,6 +122,7 @@ class _AuthInputFieldState extends State<AuthInputField>
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1A2235) : const Color(0xFFF9FAFB),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
             ),
             child: Row(children: [
               const SizedBox(width: 14),

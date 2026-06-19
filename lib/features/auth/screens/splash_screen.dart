@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../data/services/storage_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -29,8 +30,11 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(seconds: 6),
     )..repeat();
 
-    Future.delayed(const Duration(milliseconds: 2800), () {
-      if (mounted) context.go('/onboarding');
+    Future.delayed(const Duration(milliseconds: 2800), () async {
+      if (!mounted) return;
+      final seen = await StorageService.hasSeenOnboarding();
+      if (!mounted) return;
+      context.go(seen ? '/login' : '/onboarding');
     });
   }
 
@@ -61,7 +65,7 @@ class _SplashScreenState extends State<SplashScreen>
                     left: -60 + 20 * cos(_orbCtrl.value * 2 * pi),
                     child: _GlowOrb(
                       size: 280,
-                      color: AppColors.brandPurple.withOpacity(0.35),
+                      color: AppColors.brandPurple.withValues(alpha: 0.35),
                     ),
                   ),
                   Positioned(
@@ -69,7 +73,7 @@ class _SplashScreenState extends State<SplashScreen>
                     right: -80 + 20 * sin(_orbCtrl.value * 2 * pi),
                     child: _GlowOrb(
                       size: 320,
-                      color: AppColors.deepBlue.withOpacity(0.28),
+                      color: AppColors.deepBlue.withValues(alpha: 0.28),
                     ),
                   ),
                   Positioned(
@@ -77,7 +81,7 @@ class _SplashScreenState extends State<SplashScreen>
                     right: -40,
                     child: _GlowOrb(
                       size: 200,
-                      color: AppColors.teal.withOpacity(0.18),
+                      color: AppColors.teal.withValues(alpha: 0.18),
                     ),
                   ),
                 ],
@@ -120,7 +124,7 @@ class _SplashScreenState extends State<SplashScreen>
                 Text(
                   'Hire smarter with AI',
                   style: AppTextStyles.body.copyWith(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withValues(alpha: 0.6),
                     fontSize: 15,
                   ),
                 )
@@ -154,7 +158,7 @@ class _GlowOrb extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         boxShadow: [BoxShadow(color: color, blurRadius: size * 0.6, spreadRadius: 0)],
-        color: color.withOpacity(0.3),
+        color: color.withValues(alpha: 0.3),
       ),
     );
   }
@@ -180,7 +184,7 @@ class _LogoWidget extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.brandPurple.withOpacity(glow),
+                color: AppColors.brandPurple.withValues(alpha: glow),
                 blurRadius: 40,
                 spreadRadius: 8,
               ),
@@ -242,7 +246,7 @@ class _SparklePainter extends CustomPainter {
     canvas.drawPath(beam2, paint);
 
     // Small sparkles
-    paint.color = Colors.white.withOpacity(0.7);
+    paint.color = Colors.white.withValues(alpha: 0.7);
     canvas.drawCircle(Offset(cx - 16, cy - 16), 3, paint);
     canvas.drawCircle(Offset(cx + 16, cy - 16), 2.5, paint);
     canvas.drawCircle(Offset(cx + 16, cy + 16), 3, paint);
@@ -265,21 +269,16 @@ class _LoadingDotsState extends State<_LoadingDots>
   @override
   void initState() {
     super.initState();
-    _ctrls = List.generate(
-      3,
-      (i) => AnimationController(
+    _ctrls = List.generate(3, (i) {
+      final ctrl = AnimationController(
         vsync: this,
-        duration: const Duration(milliseconds: 600),
-      )..repeat(
-          reverse: true,
-          period: Duration(milliseconds: 800 + i * 200),
-        ),
-    );
-    for (var i = 0; i < _ctrls.length; i++) {
-      Future.delayed(Duration(milliseconds: i * 160), () {
-        if (mounted) _ctrls[i].forward();
+        duration: Duration(milliseconds: 600 + i * 100),
+      );
+      Future.delayed(Duration(milliseconds: i * 180), () {
+        if (mounted) ctrl.repeat(reverse: true);
       });
-    }
+      return ctrl;
+    });
   }
 
   @override
@@ -303,7 +302,7 @@ class _LoadingDotsState extends State<_LoadingDots>
             margin: const EdgeInsets.symmetric(horizontal: 3),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.35 + 0.5 * _ctrls[i].value),
+              color: Colors.white.withValues(alpha: 0.35 + 0.5 * _ctrls[i].value),
             ),
           ),
         );
