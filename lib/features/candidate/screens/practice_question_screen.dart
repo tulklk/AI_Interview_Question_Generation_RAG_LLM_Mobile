@@ -88,31 +88,65 @@ class _PracticeQuestionScreenState
             decoration: BoxDecoration(
               color: isDark ? AppColors.darkCard : AppColors.white,
               borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark
+                    ? AppColors.darkCardBorder
+                    : AppColors.cardBorder,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: Icon(PhosphorIconsBold.x, size: 18,
-              color: isDark ? AppColors.white : AppColors.nearBlack),
+            child: Icon(
+              PhosphorIconsBold.x,
+              size: 18,
+              color: isDark ? AppColors.white : AppColors.nearBlack,
+            ),
           ),
         ),
         title: Text(
           '${practice.currentIndex + 1} / ${practice.questions.length}',
           style: AppTextStyles.label.copyWith(
-            color: isDark ? AppColors.white.withOpacity(0.7) : AppColors.gray500),
+            color: isDark
+                ? AppColors.white.withValues(alpha: 0.65)
+                : AppColors.gray500,
+          ),
         ),
         centerTitle: true,
         actions: [
           Container(
             margin: const EdgeInsets.all(8),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: isDark ? AppColors.darkCard : AppColors.white,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.cardBorder),
+              border: Border.all(
+                color: AppColors.amber.withValues(alpha: 0.30),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(PhosphorIconsBold.timer, size: 14, color: AppColors.amber),
-              const SizedBox(width: 4),
-              Text(_timeStr, style: AppTextStyles.label.copyWith(
-                color: AppColors.amber, fontWeight: FontWeight.w700)),
+              const Icon(PhosphorIconsBold.timer,
+                  size: 14, color: AppColors.amber),
+              const SizedBox(width: 5),
+              Text(
+                _timeStr,
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.amber,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ]),
           ),
         ],
@@ -122,21 +156,41 @@ class _PracticeQuestionScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Progress bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 5,
-                backgroundColor: AppColors.brandPurple.withOpacity(0.1),
-                valueColor: const AlwaysStoppedAnimation(AppColors.brandPurple),
+            // ── Gradient progress bar ─────────────────────────────────
+            Container(
+              height: 6,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.brandPurple.withValues(alpha: 0.12)
+                    : AppColors.brandPurple.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: progress,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.brandPurple
+                            .withValues(alpha: 0.40),
+                        blurRadius: 8,
+                        spreadRadius: -1,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 24),
 
-            // Question card
+            // ── Question card ─────────────────────────────────────────
             AppElevatedCard(
               interactive: false,
+              accentColor: AppColors.brandPurple,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -146,22 +200,29 @@ class _PracticeQuestionScreenState
                       type: BadgeType.purple,
                     ),
                     const SizedBox(width: 8),
-                    AppDifficultyBadge(level: switch (q.difficulty) {
+                    AppDifficultyBadge(
+                        level: switch (q.difficulty) {
                       _ when q.difficulty.name == 'easy' => 'Easy',
                       _ when q.difficulty.name == 'hard' => 'Hard',
                       _ => 'Medium',
                     }),
                   ]),
                   const SizedBox(height: 16),
-                  Text(q.question, style: AppTextStyles.h4.copyWith(
-                    color: isDark ? AppColors.white : AppColors.nearBlack,
-                    height: 1.5, fontWeight: FontWeight.w600)),
+                  Text(
+                    q.question,
+                    style: AppTextStyles.h4.copyWith(
+                      color:
+                          isDark ? AppColors.white : AppColors.nearBlack,
+                      height: 1.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0),
             const SizedBox(height: 20),
 
-            // Answer area
+            // ── Answer area ───────────────────────────────────────────
             Expanded(
               child: _submitted
                   ? _FeedbackBox(
@@ -171,12 +232,45 @@ class _PracticeQuestionScreenState
                     ).animate().fadeIn(duration: 300.ms)
                   : Column(
                       children: [
+                        // Glass textarea
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: isDark ? AppColors.darkCard : AppColors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.cardBorder),
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: isDark
+                                    ? [
+                                        const Color(0xFF1D2440),
+                                        const Color(0xFF131825)
+                                      ]
+                                    : [
+                                        Colors.white,
+                                        const Color(0xFFF8F9FE)
+                                      ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppColors.brandPurple
+                                        .withValues(alpha: 0.12)
+                                    : AppColors.cardBorder,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                                BoxShadow(
+                                  color: AppColors.brandPurple
+                                      .withValues(alpha: 0.05),
+                                  blurRadius: 20,
+                                  spreadRadius: -4,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
                             ),
                             child: TextField(
                               controller: _answerCtrl,
@@ -184,42 +278,71 @@ class _PracticeQuestionScreenState
                               expands: true,
                               textAlignVertical: TextAlignVertical.top,
                               style: AppTextStyles.body.copyWith(
-                                color: isDark ? AppColors.white : AppColors.nearBlack,
-                                fontSize: 14),
+                                color: isDark
+                                    ? AppColors.white
+                                    : AppColors.nearBlack,
+                                fontSize: 14,
+                              ),
                               decoration: InputDecoration(
                                 hintText: 'Type your answer here...',
                                 hintStyle: AppTextStyles.body.copyWith(
-                                  color: isDark ? AppColors.white.withOpacity(0.3)
-                                    : AppColors.gray400,
-                                  fontSize: 14),
+                                  color: isDark
+                                      ? AppColors.white
+                                          .withValues(alpha: 0.28)
+                                      : AppColors.gray400,
+                                  fontSize: 14,
+                                ),
                                 border: InputBorder.none,
-                                contentPadding: const EdgeInsets.all(16),
+                                contentPadding:
+                                    const EdgeInsets.all(16),
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // Mic placeholder
+                        // Bottom action row
                         Row(children: [
+                          // Gradient mic button
                           Container(
-                            width: 48, height: 48,
+                            width: 52,
+                            height: 52,
                             decoration: BoxDecoration(
-                              color: AppColors.brandPurple.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: AppColors.brandPurple.withOpacity(0.3)),
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF7C3AED),
+                                  AppColors.deepBlue,
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.brandPurple
+                                      .withValues(alpha: 0.42),
+                                  blurRadius: 14,
+                                  spreadRadius: -2,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
                             ),
-                            child: const Icon(PhosphorIconsBold.microphone,
-                              size: 22, color: AppColors.brandPurple),
+                            child: const Icon(
+                              PhosphorIconsBold.microphone,
+                              size: 22,
+                              color: Colors.white,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: AppGradientButton(
                               label: 'Submit Answer',
                               onTap: _submit,
-                              height: 48,
-                              icon: const Icon(PhosphorIconsBold.checkCircle,
-                                size: 18, color: Colors.white),
+                              height: 52,
+                              icon: const Icon(
+                                PhosphorIconsBold.checkCircle,
+                                size: 18,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ]),
@@ -232,6 +355,8 @@ class _PracticeQuestionScreenState
     );
   }
 }
+
+// ── Per-question feedback box ─────────────────────────────────────────────────
 
 class _FeedbackBox extends StatelessWidget {
   final String expectedAnswer;
@@ -249,89 +374,192 @@ class _FeedbackBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // AI suggested answer
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.success.withOpacity(0.2)),
+              color: AppColors.success.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: const Border(
+                left: BorderSide(color: AppColors.success, width: 3),
+              ),
             ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                const Icon(PhosphorIconsBold.sparkle, size: 14, color: AppColors.success),
-                const SizedBox(width: 6),
-                Text('AI Suggested Answer', style: AppTextStyles.caption.copyWith(
-                  color: AppColors.success, fontWeight: FontWeight.w700)),
-              ]),
-              const SizedBox(height: 10),
-              Text(expectedAnswer, style: AppTextStyles.body.copyWith(
-                color: isDark ? AppColors.white.withOpacity(0.85) : AppColors.gray500,
-                fontSize: 13, height: 1.65)),
-            ]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(PhosphorIconsBold.sparkle,
+                      size: 14, color: AppColors.success),
+                  const SizedBox(width: 6),
+                  Text(
+                    'AI Suggested Answer',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Text(
+                  expectedAnswer,
+                  style: AppTextStyles.body.copyWith(
+                    color: isDark
+                        ? AppColors.white.withValues(alpha: 0.82)
+                        : AppColors.gray500,
+                    fontSize: 13,
+                    height: 1.65,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          if (userAnswer.isNotEmpty)
+          if (userAnswer.isNotEmpty) ...[
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.deepBlue.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.deepBlue.withOpacity(0.15)),
+                color: AppColors.deepBlue.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: const Border(
+                  left: BorderSide(color: AppColors.deepBlue, width: 3),
+                ),
               ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const Icon(PhosphorIconsBold.user, size: 14, color: AppColors.deepBlue),
-                  const SizedBox(width: 6),
-                  Text('Your Answer', style: AppTextStyles.caption.copyWith(
-                    color: AppColors.deepBlue, fontWeight: FontWeight.w700)),
-                ]),
-                const SizedBox(height: 10),
-                Text(userAnswer, style: AppTextStyles.body.copyWith(
-                  color: isDark ? AppColors.white.withOpacity(0.75) : AppColors.gray500,
-                  fontSize: 13, height: 1.65)),
-              ]),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    const Icon(PhosphorIconsBold.user,
+                        size: 14, color: AppColors.deepBlue),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Your Answer',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.deepBlue,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  Text(
+                    userAnswer,
+                    style: AppTextStyles.body.copyWith(
+                      color: isDark
+                          ? AppColors.white.withValues(alpha: 0.72)
+                          : AppColors.gray500,
+                      fontSize: 13,
+                      height: 1.65,
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ],
         ],
       ),
     );
   }
 }
 
+// ── Full session feedback screen ──────────────────────────────────────────────
+
 class _FeedbackScreen extends StatelessWidget {
   final bool isDark;
   final int totalQuestions;
-  const _FeedbackScreen({required this.isDark, required this.totalQuestions});
+  const _FeedbackScreen(
+      {required this.isDark, required this.totalQuestions});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AppProgressRing(
-                progress: 0.82,
-                size: 120,
-                strokeWidth: 10,
-                centerWidget: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text('82%', style: AppTextStyles.h1.copyWith(
-                    color: AppColors.brandPurple, fontSize: 28)),
-                  Text('Score', style: AppTextStyles.caption),
-                ]),
-              ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
-              const SizedBox(height: 32),
-              Text('Great session! 🎉', style: AppTextStyles.h2.copyWith(
-                color: isDark ? AppColors.white : AppColors.nearBlack))
-                .animate().fadeIn(delay: 200.ms),
-              const SizedBox(height: 8),
-              Text('You answered $totalQuestions questions',
-                style: AppTextStyles.body.copyWith(color: AppColors.gray500))
-                .animate().fadeIn(delay: 250.ms),
-              const SizedBox(height: 32),
-              // Feedback categories
+              // ── Hero gradient score section ─────────────────────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                    vertical: 36, horizontal: 24),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF7C3AED),
+                      Color(0xFF6C3BFF),
+                      Color(0xFF2F80ED),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6C3BFF).withValues(alpha: 0.40),
+                      blurRadius: 28,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Specular ring around progress ring
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: AppProgressRing(
+                        progress: 0.82,
+                        size: 120,
+                        strokeWidth: 10,
+                        centerWidget: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '82%',
+                              style: AppTextStyles.h1.copyWith(
+                                color: Colors.white,
+                                fontSize: 28,
+                              ),
+                            ),
+                            Text(
+                              'Score',
+                              style: AppTextStyles.caption.copyWith(
+                                color: Colors.white.withValues(alpha: 0.75),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ).animate().scale(
+                        duration: 600.ms, curve: Curves.elasticOut),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Great session! 🎉',
+                      style: AppTextStyles.h2.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ).animate().fadeIn(delay: 200.ms),
+                    const SizedBox(height: 6),
+                    Text(
+                      'You answered $totalQuestions questions',
+                      style: AppTextStyles.body.copyWith(
+                        color: Colors.white.withValues(alpha: 0.72),
+                      ),
+                    ).animate().fadeIn(delay: 250.ms),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── Score breakdown pills ─────────────────────────────────
               Row(children: [
                 _FeedbackPill('Technical', 0.85, AppColors.brandPurple),
                 const SizedBox(width: 10),
@@ -340,23 +568,64 @@ class _FeedbackScreen extends StatelessWidget {
                 _FeedbackPill('Depth', 0.72, AppColors.deepBlue),
               ]).animate().fadeIn(delay: 300.ms),
               const SizedBox(height: 16),
+
+              // ── Strengths card ────────────────────────────────────────
               AppElevatedCard(
                 interactive: false,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    const Icon(PhosphorIconsBold.trophy, size: 16, color: AppColors.amber),
-                    const SizedBox(width: 8),
-                    Text('Strengths', style: AppTextStyles.labelBold.copyWith(
-                      color: isDark ? AppColors.white : AppColors.nearBlack)),
-                  ]),
-                  const SizedBox(height: 10),
-                  Text('Strong understanding of Flutter widget lifecycle and state management patterns.',
-                    style: AppTextStyles.body.copyWith(
-                      color: isDark ? AppColors.white.withOpacity(0.75) : AppColors.gray500,
-                      fontSize: 13, height: 1.6)),
-                ]),
+                accentColor: AppColors.amber,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppColors.amber,
+                              AppColors.amber.withValues(alpha: 0.75),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(9),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.amber.withValues(alpha: 0.38),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(PhosphorIconsBold.trophy,
+                            size: 16, color: Colors.white),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Strengths',
+                        style: AppTextStyles.labelBold.copyWith(
+                          color:
+                              isDark ? AppColors.white : AppColors.nearBlack,
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Strong understanding of Flutter widget lifecycle and state management patterns.',
+                      style: AppTextStyles.body.copyWith(
+                        color: isDark
+                            ? AppColors.white.withValues(alpha: 0.72)
+                            : AppColors.gray500,
+                        fontSize: 13,
+                        height: 1.6,
+                      ),
+                    ),
+                  ],
+                ),
               ).animate().fadeIn(delay: 350.ms),
-              const SizedBox(height: 40),
+              const SizedBox(height: 32),
+
               AppGradientButton(
                 label: 'Practice Again',
                 onTap: () => context.pop(),
@@ -376,6 +645,8 @@ class _FeedbackScreen extends StatelessWidget {
   }
 }
 
+// ── Score breakdown pill ──────────────────────────────────────────────────────
+
 class _FeedbackPill extends StatelessWidget {
   final String label;
   final double score;
@@ -383,19 +654,56 @@ class _FeedbackPill extends StatelessWidget {
   const _FeedbackPill(this.label, this.score, this.color);
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Expanded(
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF1D2440), const Color(0xFF131825)]
+                : [Colors.white, const Color(0xFFF8F9FE)],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.15),
+              blurRadius: 12,
+              spreadRadius: -3,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(children: [
+          ShaderMask(
+            shaderCallback: (bounds) => LinearGradient(
+              colors: [color, color.withValues(alpha: 0.70)],
+            ).createShader(bounds),
+            child: Text(
+              '${(score * 100).round()}%',
+              style: AppTextStyles.h4.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: AppTextStyles.caption.copyWith(
+              fontSize: 10,
+              color: isDark
+                  ? AppColors.white.withValues(alpha: 0.50)
+                  : AppColors.gray500,
+            ),
+          ),
+        ]),
       ),
-      child: Column(children: [
-        Text('${(score * 100).round()}%', style: AppTextStyles.h4.copyWith(color: color)),
-        const SizedBox(height: 2),
-        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 10)),
-      ]),
-    ),
-  );
+    );
+  }
 }
