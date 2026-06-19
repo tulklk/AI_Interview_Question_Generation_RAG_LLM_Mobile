@@ -24,8 +24,10 @@ class AppSkillChip extends StatelessWidget {
     final chipColor = color ?? AppColors.brandPurple;
     final bgColor = backgroundColor ??
         (selected
-            ? chipColor.withOpacity(0.18)
-            : (isDark ? chipColor.withOpacity(0.12) : chipColor.withOpacity(0.08)));
+            ? chipColor.withValues(alpha: 0.18)
+            : (isDark
+                ? chipColor.withValues(alpha: 0.12)
+                : chipColor.withValues(alpha: 0.08)));
 
     return GestureDetector(
       onTap: onTap,
@@ -36,7 +38,7 @@ class AppSkillChip extends StatelessWidget {
           color: bgColor,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: chipColor.withOpacity(selected ? 0.5 : 0.2),
+            color: chipColor.withValues(alpha: selected ? 0.5 : 0.2),
             width: selected ? 1.5 : 1,
           ),
         ),

@@ -42,7 +42,7 @@ class AppTextField extends StatelessWidget {
           Text(
             label!,
             style: AppTextStyles.label.copyWith(
-              color: isDark ? AppColors.white.withOpacity(0.85) : AppColors.nearBlack,
+              color: isDark ? AppColors.white.withValues(alpha: 0.85) : AppColors.nearBlack,
             ),
           ),
           const SizedBox(height: 8),

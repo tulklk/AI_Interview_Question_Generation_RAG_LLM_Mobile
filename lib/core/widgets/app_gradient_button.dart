@@ -52,7 +52,7 @@ class _AppGradientButtonState extends State<AppGradientButton> {
                 ? []
                 : [
                     BoxShadow(
-                      color: AppColors.brandPurple.withOpacity(0.38),
+                      color: AppColors.brandPurple.withValues(alpha: 0.38),
                       blurRadius: 18,
                       offset: const Offset(0, 6),
                       spreadRadius: -4,

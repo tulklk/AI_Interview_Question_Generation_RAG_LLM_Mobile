@@ -33,14 +33,14 @@ class AppGlassCard extends StatelessWidget {
             padding: padding ?? const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: isDark
-                  ? Colors.white.withOpacity(0.06)
-                  : Colors.white.withOpacity(0.75),
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.white.withValues(alpha: 0.75),
               borderRadius: BorderRadius.circular(borderRadius),
               border: Border.all(
                 color: borderColor ??
                     (isDark
-                        ? Colors.white.withOpacity(0.12)
-                        : AppColors.brandPurple.withOpacity(0.12)),
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : AppColors.brandPurple.withValues(alpha: 0.12)),
               ),
             ),
             child: child,

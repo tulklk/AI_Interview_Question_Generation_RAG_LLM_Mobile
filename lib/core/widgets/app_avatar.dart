@@ -17,16 +17,17 @@ class AppAvatar extends StatelessWidget {
   });
 
   String get _initials {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '?';
+    final parts = trimmed.split(' ');
+    if (parts.length >= 2 && parts.last.isNotEmpty) {
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
     }
-    return name.substring(0, min(2, name.length)).toUpperCase();
+    return trimmed.substring(0, trimmed.length >= 2 ? 2 : 1).toUpperCase();
   }
 
-  int min(int a, int b) => a < b ? a : b;
-
   Color _colorFromName(String name) {
+    if (name.isEmpty) return AppColors.brandPurple;
     final colors = [
       AppColors.brandPurple,
       AppColors.deepBlue,
@@ -44,7 +45,7 @@ class AppAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         shape: BoxShape.circle,
       ),
       child: Center(

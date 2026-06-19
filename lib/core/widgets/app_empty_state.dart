@@ -11,6 +11,7 @@ class AppEmptyState extends StatelessWidget {
   final String subtitle;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final Color? iconColor;
 
   const AppEmptyState({
     super.key,
@@ -19,57 +20,86 @@ class AppEmptyState extends StatelessWidget {
     required this.subtitle,
     this.actionLabel,
     this.onAction,
+    this.iconColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = iconColor ?? AppColors.brandPurple;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // ── Gradient icon container ─────────────────────────────
             Container(
-              width: 80,
-              height: 80,
+              width: 88,
+              height: 88,
               decoration: BoxDecoration(
-                color: AppColors.brandPurple.withOpacity(0.08),
+                gradient: RadialGradient(
+                  colors: [
+                    color.withValues(alpha: isDark ? 0.20 : 0.12),
+                    color.withValues(alpha: isDark ? 0.06 : 0.03),
+                  ],
+                  stops: const [0.35, 1.0],
+                ),
                 shape: BoxShape.circle,
+                border: Border.all(
+                  color: color.withValues(alpha: 0.15),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: isDark ? 0.18 : 0.10),
+                    blurRadius: 24,
+                    spreadRadius: -4,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: Icon(
                 icon,
-                size: 36,
-                color: AppColors.brandPurple.withOpacity(0.6),
+                size: 38,
+                color: color.withValues(alpha: 0.55),
               ),
-            ).animate().scale(duration: 400.ms, curve: Curves.elasticOut),
-            const SizedBox(height: 20),
+            ).animate().scale(duration: 500.ms, curve: Curves.elasticOut),
+
+            const SizedBox(height: 22),
+
             Text(
               title,
               style: AppTextStyles.h4.copyWith(
                 color: isDark ? AppColors.white : AppColors.nearBlack,
               ),
               textAlign: TextAlign.center,
-            ).animate().fadeIn(delay: 100.ms),
+            ).animate().fadeIn(delay: 120.ms),
+
             const SizedBox(height: 8),
+
             Text(
               subtitle,
               style: AppTextStyles.body.copyWith(
-                color: isDark ? AppColors.white.withOpacity(0.5) : AppColors.gray500,
+                color: isDark
+                    ? AppColors.white.withValues(alpha: 0.48)
+                    : AppColors.gray500,
                 fontSize: 14,
+                height: 1.55,
               ),
               textAlign: TextAlign.center,
-            ).animate().fadeIn(delay: 150.ms),
+            ).animate().fadeIn(delay: 160.ms),
+
             if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               SizedBox(
-                width: 160,
+                width: 170,
                 child: AppGradientButton(
                   label: actionLabel!,
                   onTap: onAction,
-                  height: 44,
+                  height: 46,
                 ),
-              ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.3, end: 0),
+              ).animate().fadeIn(delay: 220.ms).slideY(begin: 0.2, end: 0),
             ],
           ],
         ),

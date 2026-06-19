@@ -136,7 +136,7 @@ class _RingPainter extends CustomPainter {
 
     // Track
     final trackPaint = Paint()
-      ..color = AppColors.brandPurple.withOpacity(0.12)
+      ..color = AppColors.brandPurple.withValues(alpha: 0.12)
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
