@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_logo.dart';
 
 // ─── Logo ────────────────────────────────────────────────────────────────────
 
@@ -12,21 +15,18 @@ class AuthLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Container(
-        width: 48, height: 48,
-        decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.brandPurple.withValues(alpha: 0.35),
-              blurRadius: 16, offset: const Offset(0, 6)),
-          ],
-        ),
-        child: const Icon(PhosphorIconsBold.sparkle, size: 24, color: Colors.white),
+      AppLogoImage(
+        size: 72,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPurple.withValues(alpha: 0.40),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       const SizedBox(height: 10),
-      Text('HireGen AI',
+      Text(AppConstants.appName,
         style: AppTextStyles.h3.copyWith(
           color: isDark ? AppColors.white : AppColors.nearBlack,
           fontSize: 18, fontWeight: FontWeight.w800)),
@@ -250,20 +250,23 @@ class AuthSocialButton extends StatelessWidget {
 
 // ─── Google logo ─────────────────────────────────────────────────────────────
 
+class GoogleLogoIcon extends StatelessWidget {
+  final double size;
+  const GoogleLogoIcon({super.key, this.size = 20});
+
+  @override
+  Widget build(BuildContext context) => SvgPicture.asset(
+    AppConstants.googleLogoAsset,
+    width: size,
+    height: size,
+  );
+}
+
 class AuthGoogleLogo extends StatelessWidget {
   const AuthGoogleLogo({super.key});
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 18, height: 18,
-    decoration: const BoxDecoration(
-      shape: BoxShape.circle, color: Color(0xFFF1F3F4)),
-    child: const Center(
-      child: Text('G',
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-          color: Color(0xFFEA4335), height: 1)),
-    ),
-  );
+  Widget build(BuildContext context) => const GoogleLogoIcon(size: 18);
 }
 
 // ─── Github logo ─────────────────────────────────────────────────────────────

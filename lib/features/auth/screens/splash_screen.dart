@@ -2,8 +2,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../../../data/services/storage_service.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -93,7 +95,6 @@ class _SplashScreenState extends State<SplashScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo
                 _LogoWidget(glowCtrl: _glowCtrl)
                     .animate()
                     .scale(
@@ -109,7 +110,7 @@ class _SplashScreenState extends State<SplashScreen>
                   shaderCallback: (bounds) =>
                       AppColors.primaryGradient.createShader(bounds),
                   child: Text(
-                    'HireGen AI',
+                    AppConstants.appName,
                     style: AppTextStyles.display.copyWith(
                       color: Colors.white,
                       fontSize: 36,
@@ -122,7 +123,7 @@ class _SplashScreenState extends State<SplashScreen>
                     .slideY(begin: 0.3, end: 0),
                 const SizedBox(height: 10),
                 Text(
-                  'Hire smarter with AI',
+                  AppConstants.appTagline,
                   style: AppTextStyles.body.copyWith(
                     color: Colors.white.withValues(alpha: 0.6),
                     fontSize: 15,
@@ -174,87 +175,19 @@ class _LogoWidget extends StatelessWidget {
       animation: glowCtrl,
       builder: (_, __) {
         final glow = 0.4 + 0.3 * glowCtrl.value;
-        return Container(
-          width: 100,
-          height: 100,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const RadialGradient(
-              colors: [Color(0xFF8B5CF6), Color(0xFF4F46E5)],
+        return AppLogoImage(
+          size: 100,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.brandPurple.withValues(alpha: glow),
+              blurRadius: 40,
+              spreadRadius: 8,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.brandPurple.withValues(alpha: glow),
-                blurRadius: 40,
-                spreadRadius: 8,
-              ),
-            ],
-          ),
-          child: const Center(
-            child: _AISparkleIcon(),
-          ),
+          ],
         );
       },
     );
   }
-}
-
-class _AISparkleIcon extends StatelessWidget {
-  const _AISparkleIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: const Size(52, 52),
-      painter: _SparklePainter(),
-    );
-  }
-}
-
-class _SparklePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-
-    // Center diamond
-    final path = Path()
-      ..moveTo(cx, cy - 20)
-      ..lineTo(cx + 6, cy)
-      ..lineTo(cx, cy + 20)
-      ..lineTo(cx - 6, cy)
-      ..close();
-    canvas.drawPath(path, paint);
-
-    // Horizontal beam
-    final beam = Path()
-      ..moveTo(cx - 24, cy)
-      ..lineTo(cx - 8, cy - 3)
-      ..lineTo(cx - 8, cy + 3)
-      ..close();
-    canvas.drawPath(beam, paint);
-
-    final beam2 = Path()
-      ..moveTo(cx + 24, cy)
-      ..lineTo(cx + 8, cy - 3)
-      ..lineTo(cx + 8, cy + 3)
-      ..close();
-    canvas.drawPath(beam2, paint);
-
-    // Small sparkles
-    paint.color = Colors.white.withValues(alpha: 0.7);
-    canvas.drawCircle(Offset(cx - 16, cy - 16), 3, paint);
-    canvas.drawCircle(Offset(cx + 16, cy - 16), 2.5, paint);
-    canvas.drawCircle(Offset(cx + 16, cy + 16), 3, paint);
-    canvas.drawCircle(Offset(cx - 16, cy + 16), 2, paint);
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
 }
 
 class _LoadingDots extends StatefulWidget {

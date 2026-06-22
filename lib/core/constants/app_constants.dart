@@ -3,6 +3,8 @@ class AppConstants {
 
   static const String appName = 'HireGen AI';
   static const String appTagline = 'Hire smarter with AI';
+  static const String logoAsset = 'assets/images/logo.png';
+  static const String googleLogoAsset = 'assets/images/google_logo.svg';
 
   // Spacing
   static const double s4 = 4;
