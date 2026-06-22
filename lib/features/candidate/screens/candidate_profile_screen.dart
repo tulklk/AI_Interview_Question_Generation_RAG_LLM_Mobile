@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -44,9 +43,10 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
   final _confPwCtrl   = TextEditingController();
 
   String? _expLevel;
-  bool _isEditing  = false;
-  bool _isSaving   = false;
-  bool _isSavingPw = false;
+  bool _isEditing    = false;
+  bool _isSaving     = false;
+  bool _isSavingPw   = false;
+  bool _isLoggingOut = false;
   bool _showCurPw  = false;
   bool _showNewPw  = false;
   bool _showConfPw = false;
@@ -168,9 +168,46 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
     }
   }
 
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1A2235) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Xác nhận đăng xuất',
+              style: AppTextStyles.h4.copyWith(
+                  color: isDark ? Colors.white : AppColors.nearBlack)),
+          content: Text('Bạn có chắc chắn muốn đăng xuất không?',
+              style: AppTextStyles.body.copyWith(color: AppColors.gray500)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Hủy',
+                  style: AppTextStyles.body.copyWith(color: AppColors.gray500)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Đăng xuất',
+                  style: AppTextStyles.body.copyWith(
+                      color: AppColors.error, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isLoggingOut = true);
+    await ref.read(authProvider.notifier).logout();
+    // GoRouter redirect handles navigation when auth.user becomes null (AC-04, AC-05)
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user       = ref.watch(authProvider).user!;
+    final user = ref.watch(authProvider).user;
+    if (user == null) return const SizedBox.shrink();
     final isDarkMode = ref.watch(themeProvider);
     final isDark     = Theme.of(context).brightness == Brightness.dark;
 
@@ -446,11 +483,9 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
                 const SizedBox(height: 24),
 
                 AppGradientButton(
-                  label: 'Đăng xuất',
-                  onTap: () {
-                    ref.read(authProvider.notifier).logout();
-                    context.go('/login');
-                  },
+                  label: _isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất',
+                  isLoading: _isLoggingOut,
+                  onTap: _isLoggingOut ? null : _logout,
                   height: 52,
                 ).animate().fadeIn(delay: 270.ms),
               ]),
