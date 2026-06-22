@@ -16,6 +16,8 @@ import '../../features/hr/screens/hr_dashboard_screen.dart';
 import '../../features/hr/screens/jobs_screen.dart';
 import '../../features/hr/screens/create_job_screen.dart';
 import '../../features/hr/screens/ai_generator_screen.dart';
+import '../../features/hr/screens/generation_plan_screen.dart';
+import '../../features/hr/screens/generation_questions_screen.dart';
 import '../../features/hr/screens/candidates_screen.dart';
 import '../../features/hr/screens/candidate_detail_screen.dart';
 import '../../features/hr/screens/interviews_screen.dart';
@@ -71,8 +73,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc.startsWith('/reset-password') ||
           loc.startsWith('/verify-email');
 
-      // Not logged in → protect all non-auth routes
-      if (!isLoggedIn && !isOnAuth) return '/splash';
+      // Not logged in → go to login directly (skips splash delay after logout)
+      if (!isLoggedIn && !isOnAuth) return '/login';
 
       // Already logged in but on an auth-only screen → go to dashboard
       if (isLoggedIn &&
@@ -101,6 +103,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
+      // ── AI Generator flow (full-screen, outside shell) ───────────────────
+      GoRoute(
+        path: '/hr/ai-generator',
+        parentNavigatorKey: _rootKey,
+        builder: (_, __) => const AIGeneratorScreen(),
+      ),
+      GoRoute(
+        path: '/hr/ai-generator/plan/:jobId',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) => GenerationPlanScreen(
+          jobId: state.pathParameters['jobId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/hr/ai-generator/questions/:jobId',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) => GenerationQuestionsScreen(
+          jobId: state.pathParameters['jobId']!,
+        ),
+      ),
+
       // ── HR Shell (also used for Admin) ────────────────────────────────────
       ShellRoute(
         navigatorKey: _hrShellKey,
@@ -109,13 +132,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/hr',
             builder: (_, __) => const HRDashboardScreen(),
-            routes: [
-              GoRoute(
-                path: 'ai-generator',
-                parentNavigatorKey: _rootKey,
-                builder: (_, __) => const AIGeneratorScreen(),
-              ),
-            ],
           ),
           GoRoute(
             path: '/hr/jobs',
