@@ -20,7 +20,8 @@ class CandidateHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider).user!;
+    final user = ref.watch(authProvider).user;
+    if (user == null) return const SizedBox.shrink();
     final applications = ref.watch(applicationsProvider);
     final jobs = ref.watch(jobsProvider);
     final upcomingInterviews = ref.watch(upcomingInterviewsProvider);

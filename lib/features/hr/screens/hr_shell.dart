@@ -3,11 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/widgets/app_animated_bottom_nav.dart';
+import '../../../core/widgets/welcome_toast.dart';
+import '../../../data/providers/app_providers.dart';
 
-class HRShell extends ConsumerWidget {
+class HRShell extends ConsumerStatefulWidget {
   final Widget child;
   const HRShell({super.key, required this.child});
 
+  @override
+  ConsumerState<HRShell> createState() => _HRShellState();
+}
+
+class _HRShellState extends ConsumerState<HRShell> {
   static const _tabs = [
     '/hr',
     '/hr/jobs',
@@ -45,7 +52,22 @@ class HRShell extends ConsumerWidget {
   ];
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    // Shell mounts AFTER showWelcome is already true, so ref.listen misses it.
+    // Check the initial value here instead.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = ref.read(authProvider);
+      if (auth.showWelcome && auth.user != null) {
+        ref.read(authProvider.notifier).consumeWelcome();
+        showWelcomeToast(context, auth.user!);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     int currentIndex = 0;
     for (int i = _tabs.length - 1; i >= 0; i--) {
@@ -56,7 +78,7 @@ class HRShell extends ConsumerWidget {
     }
 
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: AppAnimatedBottomNav(
         currentIndex: currentIndex,
         items: _navItems,
