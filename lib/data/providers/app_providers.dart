@@ -11,12 +11,14 @@ class AuthState {
   final bool isLoading;
   final String? error;
   final AuthErrorType? errorType;
+  final bool showWelcome;
 
   const AuthState({
     this.user,
     this.isLoading = false,
     this.error,
     this.errorType,
+    this.showWelcome = false,
   });
 
   AuthState copyWith({
@@ -24,6 +26,7 @@ class AuthState {
     bool? isLoading,
     String? error,
     AuthErrorType? errorType,
+    bool? showWelcome,
     bool clearError = false,
   }) =>
       AuthState(
@@ -31,6 +34,7 @@ class AuthState {
         isLoading: isLoading ?? this.isLoading,
         error: clearError ? null : (error ?? this.error),
         errorType: clearError ? null : (errorType ?? this.errorType),
+        showWelcome: showWelcome ?? this.showWelcome,
       );
 }
 
@@ -68,7 +72,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userName:     result.user.name,
         userEmail:    result.user.email,
       );
-      if (mounted) state = AuthState(user: result.user);
+      if (mounted) state = AuthState(user: result.user, showWelcome: true);
     } on AuthException catch (e) {
       if (mounted) {
         state = state.copyWith(
@@ -90,10 +94,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // ── Google OAuth ──────────────────────────────────────────────────────
 
-  Future<void> loginWithGoogle(String idToken) async {
+  Future<void> loginWithGoogle(String idToken, {GoogleProfileData? profile}) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final result = await AuthService.loginWithGoogle(idToken);
+      final result = await AuthService.loginWithGoogle(idToken, profile: profile);
       await StorageService.saveSession(
         accessToken:  result.accessToken,
         refreshToken: result.refreshToken,
@@ -102,7 +106,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userName:     result.user.name,
         userEmail:    result.user.email,
       );
-      if (mounted) state = AuthState(user: result.user);
+      if (mounted) state = AuthState(user: result.user, showWelcome: true);
     } on AuthException catch (e) {
       if (mounted) {
         state = state.copyWith(
@@ -140,9 +144,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(user: user);
   }
 
+  void consumeWelcome() {
+    if (state.showWelcome) state = state.copyWith(showWelcome: false);
+  }
+
   Future<void> logout() async {
-    await StorageService.clearSession();
-    state = const AuthState();
+    await AuthService.logout();          // AC-02: vô hiệu hóa token phía server
+    await StorageService.clearSession(); // AC-03: xóa token + session phía client
+    if (mounted) state = const AuthState(); // AC-07: đồng bộ trạng thái UI
   }
 
   static UserRole _roleFromString(String s) {

@@ -10,9 +10,11 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../data/providers/app_providers.dart';
 import '../../../data/services/auth_service.dart';
 import '../widgets/auth_background.dart';
+import 'google_profile_sheet.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/shimmer_button.dart';
 import '../widgets/auth_text_field.dart';
+import '../widgets/auth_widgets.dart' hide AuthBackground;
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -24,8 +26,9 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl  = TextEditingController();
-  bool _obscure    = true;
-  bool _rememberMe = false;
+  bool _obscure       = true;
+  bool _rememberMe    = false;
+  bool _googleLoading = false;
   String? _emailError;
   String? _passError;
   int _focusCount  = 0;
@@ -86,12 +89,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _loginWithGoogle() async {
     try {
-      final account = await GoogleSignIn().signIn();
-      if (account == null) return; // user cancelled
+      final account = await GoogleSignIn(
+        serverClientId:
+            '593842710212-vg9t701m2prpeh0g4sq5maspreuvjmm7.apps.googleusercontent.com',
+      ).signIn();
+      if (account == null) return;
 
       final auth    = await account.authentication;
       final idToken = auth.idToken;
-
       if (idToken == null) {
         ref.read(authProvider.notifier).setError(
           'Không thể lấy thông tin từ Google. Vui lòng thử lại.',
@@ -100,7 +105,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         return;
       }
 
-      await ref.read(authProvider.notifier).loginWithGoogle(idToken);
+      // Step 1: verify — check if account already exists
+      setState(() => _googleLoading = true);
+      final verify = await AuthService.verifyGoogleToken(idToken);
+
+      if (!mounted) return;
+
+      if (verify.isExistingUser) {
+        // Existing account → login directly
+        await ref.read(authProvider.notifier).loginWithGoogle(idToken);
+      } else {
+        // New account → show profile completion sheet
+        setState(() => _googleLoading = false);
+        final profile = await showGoogleProfileSheet(
+          context,
+          email: verify.email ?? account.email,
+          name:  verify.name  ?? account.displayName ?? '',
+        );
+        if (!mounted) return;
+        if (profile == null) return; // user dismissed sheet
+        await ref.read(authProvider.notifier).loginWithGoogle(
+          idToken,
+          profile: profile,
+        );
+      }
     } catch (_) {
       if (mounted) {
         ref.read(authProvider.notifier).setError(
@@ -108,6 +136,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           AuthErrorType.serverError,
         );
       }
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
     }
   }
 
@@ -129,7 +159,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Column(
             children: [
               // Logo
-              _AuthLogo(isDark: isDark)
+              AuthLogo(isDark: isDark)
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 100.ms),
               const SizedBox(height: 28),
@@ -239,7 +269,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     // Social
                     _SocialRow(
                       isDark: isDark,
-                      onGoogle: isLoading ? null : _loginWithGoogle,
+                      onGoogle: (isLoading || _googleLoading) ? null : _loginWithGoogle,
+                      googleLoading: _googleLoading,
                     ).animate().fadeIn(delay: 900.ms).slideY(begin: 0.10, end: 0),
                     const SizedBox(height: 20),
 
@@ -366,41 +397,6 @@ class _SuccessBanner extends StatelessWidget {
       );
 }
 
-// ─── Logo ─────────────────────────────────────────────────────────────────────
-
-class _AuthLogo extends StatelessWidget {
-  final bool isDark;
-  const _AuthLogo({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                    color: AppColors.brandPurple.withValues(alpha: 0.40),
-                    blurRadius: 20, offset: const Offset(0, 8)),
-              ],
-            ),
-            child: const Icon(PhosphorIconsBold.sparkle, size: 26, color: Colors.white),
-          ),
-          const SizedBox(height: 10),
-          Text('HireGen AI',
-              style: AppTextStyles.h3.copyWith(
-                  color: isDark ? Colors.white : AppColors.nearBlack,
-                  fontSize: 18, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text('AI-Powered Interview Question Generator',
-              style: AppTextStyles.caption.copyWith(
-                  color: AppColors.gray400, fontSize: 12)),
-        ],
-      );
-}
-
 // ─── Password field wrapper ───────────────────────────────────────────────────
 
 class _PasswordField extends StatelessWidget {
@@ -506,14 +502,21 @@ class _OrDivider extends StatelessWidget {
 class _SocialRow extends StatelessWidget {
   final bool isDark;
   final VoidCallback? onGoogle;
-  const _SocialRow({required this.isDark, this.onGoogle});
+  final bool googleLoading;
+  const _SocialRow({required this.isDark, this.onGoogle, this.googleLoading = false});
 
   @override
   Widget build(BuildContext context) => Row(children: [
         Expanded(
           child: _SocialBtn(
             label: 'Google',
-            icon: const _GoogleIcon(),
+            icon: googleLoading
+                ? const SizedBox(
+                    width: 18, height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.brandPurple),
+                  )
+                : const GoogleLogoIcon(),
             isDark: isDark,
             onTap: onGoogle,
           ),
@@ -570,20 +573,4 @@ class _SocialBtn extends StatelessWidget {
       ),
     );
   }
-}
-
-class _GoogleIcon extends StatelessWidget {
-  const _GoogleIcon();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 18, height: 18,
-        decoration: const BoxDecoration(
-            shape: BoxShape.circle, color: Color(0xFFF1F3F4)),
-        child: const Center(
-          child: Text('G',
-              style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w800,
-                  color: Color(0xFFEA4335), height: 1.0))),
-      );
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,11 +11,14 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/providers/app_providers.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/company_service.dart';
 import '../../../models/user_model.dart';
 import '../widgets/auth_background.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/shimmer_button.dart';
 import '../widgets/auth_text_field.dart';
+import '../widgets/auth_widgets.dart' hide AuthBackground;
+import 'google_profile_sheet.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -47,6 +52,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   final _companyCtrl   = TextEditingController();
   final _jobTitleCtrl  = TextEditingController();
   bool _agreedTerms    = false;
+  String? _selectedCompanyId;
 
   // Step 2 — Candidate profile
   final _targetRoleCtrl = TextEditingController();
@@ -65,6 +71,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     _stepAnim = AnimationController(
         vsync: this, duration: AuthAnimations.stepSlide);
     _passCtrl.addListener(() => setState(() {}));
+    _confirmCtrl.addListener(() => setState(() {}));
   }
 
   @override
@@ -116,9 +123,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       _emailError   = email.isEmpty   ? 'Vui lòng nhập email'
           : !emailRgx.hasMatch(email) ? 'Địa chỉ email không hợp lệ'
           : null;
-      _passError    = pass.isEmpty    ? 'Vui lòng nhập mật khẩu'
-          : pass.length < 8           ? 'Tối thiểu 8 ký tự'
-          : null;
+      _passError    = pass.isEmpty
+          ? 'Vui lòng nhập mật khẩu'
+          : pass.length < 8
+              ? 'Tối thiểu 8 ký tự'
+              : !pass.contains(RegExp(r'[A-Z]'))
+                  ? 'Cần ít nhất 1 chữ hoa (A-Z)'
+                  : !pass.contains(RegExp(r'[a-z]'))
+                      ? 'Cần ít nhất 1 chữ thường (a-z)'
+                      : !pass.contains(RegExp(r'[0-9]'))
+                          ? 'Cần ít nhất 1 chữ số (0-9)'
+                          : !pass.contains(RegExp(r'[^A-Za-z0-9]'))
+                              ? 'Cần ít nhất 1 ký tự đặc biệt (!@#...)'
+                              : null;
       _confirmError = confirm.isEmpty ? 'Vui lòng xác nhận mật khẩu'
           : confirm != pass           ? 'Mật khẩu xác nhận không khớp'
           : null;
@@ -159,11 +176,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     try {
       if (_roleIndex == 0) {
         await AuthService.registerHR(
-          email:       _emailCtrl.text.trim(),
-          password:    _passCtrl.text,
-          fullName:    _fullNameCtrl.text.trim(),
-          companyName: _companyCtrl.text.trim(),
-          jobTitle:    _jobTitleCtrl.text.trim(),
+          email:           _emailCtrl.text.trim(),
+          password:        _passCtrl.text,
+          confirmPassword: _confirmCtrl.text,
+          fullName:        _fullNameCtrl.text.trim(),
+          companyName:     _companyCtrl.text.trim(),
+          companyId:       _selectedCompanyId,
+          jobTitle:        _jobTitleCtrl.text.trim(),
         );
       } else {
         await AuthService.registerCandidate(
@@ -200,15 +219,57 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
   Future<void> _continueWithGoogle() async {
     try {
-      final account = await GoogleSignIn().signIn();
+      final account = await GoogleSignIn(
+        serverClientId:
+            '593842710212-vg9t701m2prpeh0g4sq5maspreuvjmm7.apps.googleusercontent.com',
+      ).signIn();
       if (account == null) return;
-      // Pre-fill email from Google account; user completes profile in step 2
-      _emailCtrl.text = account.email;
-      final nameParts = account.displayName?.trim().split(' ') ?? [];
-      if (nameParts.isNotEmpty) _fullNameCtrl.text = account.displayName ?? '';
-      setState(() { _step = 2; _apiError = null; _clearStep1Errors(); });
+
+      final auth    = await account.authentication;
+      final idToken = auth.idToken;
+      if (idToken == null) {
+        setState(() => _apiError = 'Không thể lấy thông tin từ Google. Vui lòng thử lại.');
+        return;
+      }
+
+      setState(() { _isLoading = true; _apiError = null; });
+
+      // Verify: check if account already exists
+      final verify = await AuthService.verifyGoogleToken(idToken);
+
+      if (!mounted) return;
+
+      if (verify.isExistingUser) {
+        // Already registered → log them in directly
+        setState(() => _isLoading = false);
+        await ref.read(authProvider.notifier).loginWithGoogle(idToken);
+        return;
+      }
+
+      // New account → show profile completion sheet
+      setState(() => _isLoading = false);
+      final profile = await showGoogleProfileSheet(
+        context,
+        email: verify.email ?? account.email,
+        name:  verify.name  ?? account.displayName ?? '',
+      );
+      if (!mounted || profile == null) return;
+
+      // Register + login via Google OAuth
+      await ref.read(authProvider.notifier).loginWithGoogle(
+        idToken,
+        profile: profile,
+      );
+      // GoRouter redirect handles navigation after user is set
+    } on AuthException catch (e) {
+      if (mounted) setState(() { _isLoading = false; _apiError = e.message; });
     } catch (_) {
-      setState(() => _apiError = 'Đăng ký với Google thất bại. Vui lòng thử lại.');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _apiError  = 'Đăng ký với Google thất bại. Vui lòng thử lại.';
+        });
+      }
     }
   }
 
@@ -228,7 +289,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 32, 20, 32),
           child: Column(children: [
-            _AuthLogo(isDark: isDark)
+            AuthLogo(isDark: isDark)
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 100.ms),
             const SizedBox(height: 24),
@@ -331,6 +392,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                             obscureConfirm: _obscureConfirm,
                             isHR:           _roleIndex == 0,
                             password:       _passCtrl.text,
+                            confirmText:    _confirmCtrl.text,
                             emailError:     _emailError,
                             passError:      _passError,
                             confirmError:   _confirmError,
@@ -349,6 +411,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                 companyError:  _companyError,
                                 onToggleTerms: () =>
                                     setState(() => _agreedTerms = !_agreedTerms),
+                                onCompanyPicked: (c) =>
+                                    setState(() => _selectedCompanyId = c.id),
                               )
                             : _CandidateStep2Form(
                                 key: const ValueKey('step2cand'),
@@ -425,45 +489,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       ),
     );
   }
-}
-
-// ─── Logo ─────────────────────────────────────────────────────────────────────
-
-class _AuthLogo extends StatelessWidget {
-  final bool isDark;
-  const _AuthLogo({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                    color: AppColors.brandPurple.withValues(alpha: 0.40),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8))
-              ],
-            ),
-            child: const Icon(PhosphorIconsBold.sparkle,
-                size: 26, color: Colors.white),
-          ),
-          const SizedBox(height: 10),
-          Text('HireGen AI',
-              style: AppTextStyles.h3.copyWith(
-                  color: isDark ? Colors.white : AppColors.nearBlack,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text('AI-Powered Interview Question Generator',
-              style: AppTextStyles.caption
-                  .copyWith(color: AppColors.gray400, fontSize: 12)),
-        ],
-      );
 }
 
 // ─── Role tabs ────────────────────────────────────────────────────────────────
@@ -770,6 +795,7 @@ class _Step1Form extends StatelessWidget {
   final TextEditingController emailCtrl, passCtrl, confirmCtrl;
   final bool obscurePass, obscureConfirm, isHR;
   final String password;
+  final String confirmText;
   final String? emailError, passError, confirmError;
   final VoidCallback onTogglePass, onToggleConfirm;
 
@@ -782,6 +808,7 @@ class _Step1Form extends StatelessWidget {
     required this.obscureConfirm,
     required this.isHR,
     required this.password,
+    required this.confirmText,
     this.emailError,
     this.passError,
     this.confirmError,
@@ -835,19 +862,43 @@ class _Step1Form extends StatelessWidget {
             icon: PhosphorIconsBold.lockKey,
             obscureText: obscureConfirm,
             error: confirmError,
-            trailing: GestureDetector(
-              onTap: onToggleConfirm,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                child: Icon(
-                  obscureConfirm
-                      ? PhosphorIconsBold.eye
-                      : PhosphorIconsBold.eyeSlash,
-                  key: ValueKey(obscureConfirm),
-                  size: 18,
-                  color: AppColors.gray400,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, anim) => ScaleTransition(
+                    scale: CurvedAnimation(
+                        parent: anim, curve: Curves.elasticOut),
+                    child: FadeTransition(opacity: anim, child: child),
+                  ),
+                  child: (confirmText.isNotEmpty &&
+                          password.isNotEmpty &&
+                          confirmText == password)
+                      ? const Icon(
+                          PhosphorIconsBold.checkCircle,
+                          key: ValueKey('match'),
+                          size: 18,
+                          color: Color(0xFF22C55E),
+                        )
+                      : const SizedBox.shrink(key: ValueKey('no-match')),
                 ),
-              ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: onToggleConfirm,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(
+                      obscureConfirm
+                          ? PhosphorIconsBold.eye
+                          : PhosphorIconsBold.eyeSlash,
+                      key: ValueKey(obscureConfirm),
+                      size: 18,
+                      color: AppColors.gray400,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -915,6 +966,7 @@ class _HRStep2Form extends StatelessWidget {
   final bool agreedTerms, isDark;
   final String? fullNameError, companyError;
   final VoidCallback onToggleTerms;
+  final void Function(CompanyModel)? onCompanyPicked;
 
   const _HRStep2Form({
     super.key,
@@ -926,6 +978,7 @@ class _HRStep2Form extends StatelessWidget {
     this.fullNameError,
     this.companyError,
     required this.onToggleTerms,
+    this.onCompanyPicked,
   });
 
   @override
@@ -941,12 +994,11 @@ class _HRStep2Form extends StatelessWidget {
             error: fullNameError,
           ),
           const SizedBox(height: 14),
-          AuthInputField(
+          _CompanySearchField(
             controller: companyCtrl,
-            label: 'Tên công ty *',
-            hint: 'FPT Software',
-            icon: PhosphorIconsBold.buildings,
+            isDark: isDark,
             error: companyError,
+            onPicked: onCompanyPicked,
           ),
           const SizedBox(height: 14),
           AuthInputField(
@@ -1007,6 +1059,198 @@ class _HRStep2Form extends StatelessWidget {
             ]),
           ),
         ],
+      );
+}
+
+// ─── Company search field ─────────────────────────────────────────────────────
+
+class _CompanySearchField extends StatefulWidget {
+  final TextEditingController controller;
+  final bool isDark;
+  final String? error;
+  final void Function(CompanyModel)? onPicked;
+
+  const _CompanySearchField({
+    required this.controller,
+    required this.isDark,
+    this.error,
+    this.onPicked,
+  });
+
+  @override
+  State<_CompanySearchField> createState() => _CompanySearchFieldState();
+}
+
+class _CompanySearchFieldState extends State<_CompanySearchField> {
+  List<CompanyModel> _results = [];
+  bool _open = false;
+  bool _searching = false;
+  bool _suppress = false;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onText);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    widget.controller.removeListener(_onText);
+    super.dispose();
+  }
+
+  void _onText() {
+    if (_suppress) return;
+    _debounce?.cancel();
+    final q = widget.controller.text.trim();
+    if (q.isEmpty) {
+      setState(() {
+        _results = [];
+        _open = false;
+        _searching = false;
+      });
+      return;
+    }
+    setState(() => _searching = true);
+    _debounce = Timer(const Duration(milliseconds: 420), () => _fetch(q));
+  }
+
+  Future<void> _fetch(String q) async {
+    final res = await CompanyService.search(q);
+    if (!mounted) return;
+    setState(() {
+      _results = res;
+      _open = res.isNotEmpty;
+      _searching = false;
+    });
+  }
+
+  void _pick(CompanyModel c) {
+    _suppress = true;
+    widget.controller.value = TextEditingValue(
+      text: c.name,
+      selection: TextSelection.fromPosition(TextPosition(offset: c.name.length)),
+    );
+    _suppress = false;
+    setState(() {
+      _open = false;
+      _results = [];
+    });
+    widget.onPicked?.call(c);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AuthInputField(
+          controller: widget.controller,
+          label: 'Tên công ty *',
+          hint: 'Nhập tên để tìm kiếm...',
+          icon: PhosphorIconsBold.buildings,
+          error: widget.error,
+          trailing: _searching
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.brandPurple,
+                  ),
+                )
+              : null,
+        ),
+        if (_open) ...[
+          const SizedBox(height: 4),
+          _CompanyDropdown(
+            results: _results,
+            isDark: isDark,
+            onPick: _pick,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _CompanyDropdown extends StatelessWidget {
+  final List<CompanyModel> results;
+  final bool isDark;
+  final void Function(CompanyModel) onPick;
+
+  const _CompanyDropdown({
+    required this.results,
+    required this.isDark,
+    required this.onPick,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(maxHeight: 200),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1A2235) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppColors.gray200,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: ListView.separated(
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            itemCount: results.length,
+            separatorBuilder: (_, __) => Divider(
+              height: 1,
+              thickness: 0.5,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : AppColors.gray100,
+            ),
+            itemBuilder: (context, i) {
+              final c = results[i];
+              return InkWell(
+                onTap: () => onPick(c),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  child: Row(children: [
+                    Icon(PhosphorIconsBold.buildings,
+                        size: 14,
+                        color: AppColors.brandPurple.withValues(alpha: 0.75)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        c.name,
+                        style: AppTextStyles.body.copyWith(
+                          color: isDark ? Colors.white : AppColors.nearBlack,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Icon(PhosphorIconsRegular.caretRight,
+                        size: 12, color: AppColors.gray400),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ),
       );
 }
 
@@ -1225,7 +1469,7 @@ class _SocialRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _SocialBtn(
         label: 'Google',
-        icon: _GoogleIcon(),
+        icon: const GoogleLogoIcon(),
         isDark: isDark,
         onTap: onGoogleTap,
       );
@@ -1265,22 +1509,5 @@ class _SocialBtn extends StatelessWidget {
                     fontWeight: FontWeight.w600)),
           ]),
         ),
-      );
-}
-
-class _GoogleIcon extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 20,
-        height: 20,
-        decoration: const BoxDecoration(
-            shape: BoxShape.circle, color: Color(0xFFF1F3F4)),
-        child: const Center(
-            child: Text('G',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFFEA4335),
-                    height: 1.0))),
       );
 }

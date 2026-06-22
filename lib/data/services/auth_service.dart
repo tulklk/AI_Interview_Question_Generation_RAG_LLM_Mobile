@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../models/user_model.dart';
+import 'storage_service.dart';
 
 // ── Error types ──────────────────────────────────────────────────────────────
 
@@ -19,6 +20,52 @@ class AuthException implements Exception {
 
   @override
   String toString() => 'AuthException(${type.name}): $message';
+}
+
+// ── Google OAuth models ───────────────────────────────────────────────────────
+
+class GoogleVerifyResult {
+  final bool isExistingUser;
+  final String? email;
+  final String? name;
+  final String? avatarUrl;
+
+  const GoogleVerifyResult({
+    required this.isExistingUser,
+    this.email,
+    this.name,
+    this.avatarUrl,
+  });
+}
+
+class GoogleProfileData {
+  final String intendedRole;   // 'hrManager' | 'candidate'
+  final String? companyName;
+  final String? companyId;
+  final String? jobTitle;
+  final String? targetRole;
+  final String? seniorityLevel;
+  final List<String> techStack;
+
+  const GoogleProfileData({
+    required this.intendedRole,
+    this.companyName,
+    this.companyId,
+    this.jobTitle,
+    this.targetRole,
+    this.seniorityLevel,
+    this.techStack = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'intendedRole': intendedRole,
+        if (companyName != null && companyName!.isNotEmpty) 'companyName': companyName,
+        if (companyId != null && companyId!.isNotEmpty) 'companyId': companyId,
+        if (jobTitle != null && jobTitle!.isNotEmpty) 'jobTitle': jobTitle,
+        if (targetRole != null && targetRole!.isNotEmpty) 'targetRole': targetRole,
+        if (seniorityLevel != null && seniorityLevel!.isNotEmpty) 'seniorityLevel': seniorityLevel,
+        if (techStack.isNotEmpty) 'techStack': techStack,
+      };
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
@@ -46,6 +93,12 @@ class AuthService {
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 15),
     headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+  ))..interceptors.add(LogInterceptor(
+    requestBody: true,
+    responseBody: true,
+    requestHeader: false,
+    responseHeader: false,
+    logPrint: (o) => print('[AuthService] $o'),
   ));
 
   // ── Email / password login ──────────────────────────────────────────────
@@ -63,12 +116,46 @@ class AuthService {
     }
   }
 
-  // ── Google OAuth login ──────────────────────────────────────────────────
+    // ── Google OAuth verify (check if account exists) ──────────────────────
 
-  static Future<LoginResult> loginWithGoogle(String idToken) async {
+  static Future<GoogleVerifyResult> verifyGoogleToken(String idToken) async {
+    try {
+      final res = await _dio.post('/api/auth/oauth/google/verify', data: {
+        'idToken': idToken,
+      });
+      final payload = (res.data is Map && res.data['data'] is Map)
+          ? res.data['data'] as Map<String, dynamic>
+          : (res.data is Map ? res.data as Map<String, dynamic> : <String, dynamic>{});
+
+      final isNewUser = payload['isNewUser'] as bool? ??
+          !(payload.containsKey('accessToken') ||
+            payload.containsKey('userId') ||
+            payload.containsKey('id'));
+
+      return GoogleVerifyResult(
+        isExistingUser: !isNewUser,
+        email:     payload['email']?.toString(),
+        name:      (payload['fullName'] ?? payload['name'])?.toString(),
+        avatarUrl: payload['avatarUrl']?.toString(),
+      );
+    } on DioException catch (e) {
+      if ((e.response?.statusCode ?? 0) == 404) {
+        return const GoogleVerifyResult(isExistingUser: false);
+      }
+      throw _mapDioError(e, isOAuth: true);
+    }
+  }
+
+  // ── Google OAuth login / register ───────────────────────────────────────
+
+  static Future<LoginResult> loginWithGoogle(
+    String idToken, {
+    GoogleProfileData? profile,
+  }) async {
     try {
       final res = await _dio.post('/api/auth/oauth/google', data: {
         'idToken': idToken,
+        if (profile != null) ...profile.toJson(),
       });
       return _parseResponse(res.data);
     } on DioException catch (e) {
@@ -81,16 +168,20 @@ class AuthService {
   static Future<void> registerHR({
     required String email,
     required String password,
+    required String confirmPassword,
     required String fullName,
     required String companyName,
+    String? companyId,
     String? jobTitle,
   }) async {
     try {
       await _dio.post('/api/auth/register/hr', data: {
-        'email':       email,
-        'password':    password,
-        'fullName':    fullName,
-        'companyName': companyName,
+        'email':           email,
+        'password':        password,
+        'confirmPassword': confirmPassword,
+        'fullName':        fullName,
+        'companyName':     companyName,
+        if (companyId != null && companyId.isNotEmpty) 'companyId': companyId,
         if (jobTitle != null && jobTitle.isNotEmpty) 'jobTitle': jobTitle,
       });
     } on DioException catch (e) {
@@ -131,6 +222,27 @@ class AuthService {
           type: AuthErrorType.networkError,
         );
       }
+    }
+  }
+
+  // ── Logout ───────────────────────────────────────────────────────────────────
+
+  static Future<void> logout() async {
+    try {
+      final token        = await StorageService.getAccessToken();
+      final refreshToken = await StorageService.getRefreshToken();
+      await _dio.post(
+        '/api/auth/logout',
+        data: {
+          if (refreshToken != null && refreshToken.isNotEmpty)
+            'refreshToken': refreshToken,
+        },
+        options: (token != null && token.isNotEmpty)
+            ? Options(headers: {'Authorization': 'Bearer $token'})
+            : null,
+      );
+    } catch (_) {
+      // Swallow all errors — local session cleared regardless (AC-06 graceful degradation)
     }
   }
 
@@ -236,11 +348,29 @@ class AuthService {
     }
     final status = e.response?.statusCode ?? 0;
     final body   = e.response?.data;
-    final rawMsg = (body is Map
-            ? (body['message'] ?? body['error'] ?? '')
-            : body?.toString() ?? '')
-        .toString();
-    final lower  = rawMsg.toLowerCase();
+
+    String rawMsg = '';
+    String details = '';
+    if (body is Map) {
+      rawMsg = (body['message'] ?? body['error'] ?? '').toString();
+      final errs = body['errors'];
+      if (errs is Map) {
+        details = errs.entries.map((entry) {
+          final v = entry.value;
+          final msg = v is List ? v.join(', ') : v.toString();
+          return msg;
+        }).join(' • ');
+      } else if (errs is List) {
+        details = errs.map((v) => v.toString()).join(' • ');
+      } else if (errs is String) {
+        details = errs;
+      }
+    } else {
+      rawMsg = body?.toString() ?? '';
+    }
+
+    final displayMsg = [rawMsg, details].where((s) => s.isNotEmpty).join('\n');
+    final lower = displayMsg.toLowerCase();
 
     if (status == 409 ||
         (status == 400 &&
@@ -254,8 +384,8 @@ class AuthService {
         type: AuthErrorType.invalidCredentials,
       );
     }
-    if (rawMsg.isNotEmpty) {
-      return AuthException(message: rawMsg, type: AuthErrorType.serverError);
+    if (displayMsg.isNotEmpty) {
+      return AuthException(message: displayMsg, type: AuthErrorType.serverError);
     }
     return const AuthException(
       message: 'Có lỗi xảy ra. Vui lòng thử lại sau.',
