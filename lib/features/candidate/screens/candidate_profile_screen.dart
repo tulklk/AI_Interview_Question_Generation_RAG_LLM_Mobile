@@ -9,6 +9,7 @@ import '../../../core/widgets/app_elevated_card.dart';
 import '../../../core/widgets/app_gradient_button.dart';
 import '../../../core/widgets/app_skill_chip.dart';
 import '../../../core/widgets/app_text_field.dart';
+import '../../../core/providers/theme_provider.dart';
 import '../../../data/providers/app_providers.dart';
 import '../../../data/services/profile_service.dart';
 import '../../../data/services/storage_service.dart';
@@ -208,7 +209,7 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
     if (user == null) return const SizedBox.shrink();
-    final isDarkMode = ref.watch(themeProvider);
+    final isDarkMode = ref.watch(themeProvider) == ThemeMode.dark;
     final isDark     = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -474,7 +475,7 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
                     isDark: isDark,
                     trailing: Switch.adaptive(
                       value: isDarkMode,
-                      onChanged: (v) => ref.read(themeProvider.notifier).state = v,
+                      onChanged: (v) => ref.read(themeProvider.notifier).setTheme(v ? ThemeMode.dark : ThemeMode.light),
                       activeThumbColor: Colors.white,
                       activeTrackColor: AppColors.brandPurple,
                     ),

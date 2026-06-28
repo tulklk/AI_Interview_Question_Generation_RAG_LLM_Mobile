@@ -170,10 +170,6 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
   (_) => AuthNotifier(),
 );
 
-// ─── Theme ─────────────────────────────────────────────────────────────────
-
-final themeProvider = StateProvider<bool>((ref) => false); // false = light
-
 // ─── Role Selection ────────────────────────────────────────────────────────
 
 final selectedRoleProvider = StateProvider<UserRole?>((ref) => null);
