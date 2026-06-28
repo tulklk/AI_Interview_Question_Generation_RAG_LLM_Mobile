@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/widgets/app_animated_bottom_nav.dart';
 import '../../../core/widgets/welcome_toast.dart';
 import '../../../data/providers/app_providers.dart';
+import '../../hr_generate/presentation/widgets/generation_progress_badge.dart';
 
 class HRShell extends ConsumerStatefulWidget {
   final Widget child;
@@ -78,7 +79,12 @@ class _HRShellState extends ConsumerState<HRShell> {
     }
 
     return Scaffold(
-      body: widget.child,
+      body: Stack(
+        children: [
+          widget.child,
+          const GenerationProgressBadge(),
+        ],
+      ),
       bottomNavigationBar: AppAnimatedBottomNav(
         currentIndex: currentIndex,
         items: _navItems,

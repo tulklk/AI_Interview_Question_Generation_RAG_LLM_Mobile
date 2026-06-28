@@ -11,17 +11,19 @@ import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/auth/screens/reset_password_screen.dart';
 import '../../features/auth/screens/email_verification_screen.dart';
-import '../../features/hr/screens/hr_shell.dart';
-import '../../features/hr/screens/hr_dashboard_screen.dart';
+import '../../features/shell/hr_app_shell.dart';
+import '../../features/dashboard/hr_dashboard_screen.dart' as dash;
 import '../../features/hr/screens/jobs_screen.dart';
 import '../../features/hr/screens/create_job_screen.dart';
-import '../../features/hr/screens/ai_generator_screen.dart';
-import '../../features/hr/screens/generation_plan_screen.dart';
-import '../../features/hr/screens/generation_questions_screen.dart';
+import '../../features/hr_generate/presentation/screens/generate_screen.dart';
 import '../../features/hr/screens/candidates_screen.dart';
 import '../../features/hr/screens/candidate_detail_screen.dart';
 import '../../features/hr/screens/interviews_screen.dart';
 import '../../features/hr/screens/hr_profile_screen.dart';
+import '../../features/knowledge/screens/knowledge_screen.dart';
+import '../../features/history/screens/history_list_screen.dart';
+import '../../features/history/screens/history_detail_screen.dart';
+import '../../features/settings/screens/settings_screen.dart';
 import '../../features/candidate/screens/candidate_shell.dart';
 import '../../features/candidate/screens/candidate_home_screen.dart';
 import '../../features/candidate/screens/candidate_jobs_screen.dart';
@@ -30,12 +32,21 @@ import '../../features/candidate/screens/practice_screen.dart';
 import '../../features/candidate/screens/practice_question_screen.dart';
 import '../../features/candidate/screens/applications_screen.dart';
 import '../../features/candidate/screens/candidate_profile_screen.dart';
+import '../../features/jobseeker/shell/jobseeker_shell.dart';
+import '../../features/jobseeker/screens/dashboard/jobseeker_dashboard_screen.dart';
+import '../../features/jobseeker/screens/marketplace/marketplace_screen.dart';
+import '../../features/jobseeker/screens/set_detail/set_detail_screen.dart';
+import '../../features/jobseeker/screens/practice/practice_session_screen.dart';
+import '../../features/jobseeker/screens/feedback/feedback_screen.dart';
+import '../../features/jobseeker/screens/history/jobseeker_history_screen.dart';
+import '../../features/jobseeker/screens/profile/jobseeker_profile_screen.dart';
+import '../../features/jobseeker/screens/settings/jobseeker_settings_screen.dart';
 
-final _rootKey           = GlobalKey<NavigatorState>();
-final _hrShellKey        = GlobalKey<NavigatorState>();
-final _candidateShellKey = GlobalKey<NavigatorState>();
+final _rootKey              = GlobalKey<NavigatorState>();
+final _hrShellKey           = GlobalKey<NavigatorState>();
+final _candidateShellKey    = GlobalKey<NavigatorState>();
+final _jobseekerShellKey    = GlobalKey<NavigatorState>();
 
-// Notifies GoRouter whenever auth state changes — without recreating the router.
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._ref) {
     _ref.listen<AuthState>(authProvider, (_, __) => notifyListeners());
@@ -47,9 +58,9 @@ String _homeForRole(UserRole role) {
   switch (role) {
     case UserRole.admin:
     case UserRole.hrManager:
-      return '/hr';
+      return '/hr/dashboard';
     case UserRole.candidate:
-      return '/candidate';
+      return '/jobseeker/dashboard';
   }
 }
 
@@ -57,13 +68,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterNotifier(ref);
 
   return GoRouter(
-    navigatorKey: _rootKey,
-    initialLocation: '/splash',
+    navigatorKey:      _rootKey,
+    initialLocation:   '/splash',
     refreshListenable: notifier,
     redirect: (context, state) {
-      final auth     = ref.read(authProvider);
+      final auth       = ref.read(authProvider);
       final isLoggedIn = auth.user != null;
-      final loc      = state.matchedLocation;
+      final loc        = state.matchedLocation;
 
       final isOnAuth = loc.startsWith('/splash') ||
           loc.startsWith('/onboarding') ||
@@ -73,14 +84,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc.startsWith('/reset-password') ||
           loc.startsWith('/verify-email');
 
-      // Not logged in → go to login directly (skips splash delay after logout)
       if (!isLoggedIn && !isOnAuth) return '/login';
 
-      // Already logged in but on an auth-only screen → go to dashboard
       if (isLoggedIn &&
           (loc.startsWith('/login') || loc.startsWith('/register'))) {
         return _homeForRole(auth.user!.role);
       }
+
+      // Redirect legacy root /hr to /hr/dashboard
+      if (loc == '/hr') return '/hr/dashboard';
 
       return null;
     },
@@ -103,66 +115,109 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
-      // ── AI Generator flow (full-screen, outside shell) ───────────────────
+      // ── AI Generator / Generate — full-screen outside shell ───────────────
       GoRoute(
-        path: '/hr/ai-generator',
+        path:               '/hr/generate',
         parentNavigatorKey: _rootKey,
-        builder: (_, __) => const AIGeneratorScreen(),
+        builder:            (_, __) => const GenerateScreen(),
+      ),
+      // Legacy alias
+      GoRoute(
+        path:               '/hr/ai-generator',
+        parentNavigatorKey: _rootKey,
+        builder:            (_, __) => const GenerateScreen(),
       ),
       GoRoute(
-        path: '/hr/ai-generator/plan/:jobId',
+        path:               '/hr/ai-generator/plan/:jobId',
         parentNavigatorKey: _rootKey,
-        builder: (_, state) => GenerationPlanScreen(
-          jobId: state.pathParameters['jobId']!,
-        ),
+        redirect:           (_, __) => '/hr/generate',
       ),
       GoRoute(
-        path: '/hr/ai-generator/questions/:jobId',
+        path:               '/hr/ai-generator/questions/:jobId',
         parentNavigatorKey: _rootKey,
-        builder: (_, state) => GenerationQuestionsScreen(
-          jobId: state.pathParameters['jobId']!,
-        ),
+        redirect:           (_, __) => '/hr/generate',
       ),
 
-      // ── HR Shell (also used for Admin) ────────────────────────────────────
+      // ── History detail — full-screen outside shell ────────────────────────
+      GoRoute(
+        path:               '/hr/history/:id',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) =>
+            HistoryDetailScreen(sessionId: state.pathParameters['id']!),
+      ),
+
+      // ── HR Shell ──────────────────────────────────────────────────────────
       ShellRoute(
         navigatorKey: _hrShellKey,
-        builder: (_, __, child) => HRShell(child: child),
+        builder: (_, state, child) => HRAppShell(
+          currentLocation: state.matchedLocation,
+          child:           child,
+        ),
         routes: [
+          // Root → redirect
           GoRoute(
-            path: '/hr',
-            builder: (_, __) => const HRDashboardScreen(),
+            path:     '/hr',
+            redirect: (_, __) => '/hr/dashboard',
           ),
+
+          // Dashboard
           GoRoute(
-            path: '/hr/jobs',
+            path:    '/hr/dashboard',
+            builder: (_, __) => const dash.HRDashboardScreen(),
+          ),
+
+          // History list
+          GoRoute(
+            path:    '/hr/history',
+            builder: (_, __) => const HistoryListScreen(),
+          ),
+
+          // Knowledge Base
+          GoRoute(
+            path:    '/hr/knowledge',
+            builder: (_, __) => const KnowledgeScreen(),
+          ),
+
+          // Settings
+          GoRoute(
+            path:    '/hr/settings',
+            builder: (_, __) => const SettingsScreen(),
+          ),
+
+          // HR Profile
+          GoRoute(
+            path:    '/hr/profile',
+            builder: (_, __) => const HRProfileScreen(),
+          ),
+
+          // Existing HR sub-routes (kept for backward compat)
+          GoRoute(
+            path:    '/hr/jobs',
             builder: (_, __) => const JobsScreen(),
             routes: [
               GoRoute(
-                path: 'create',
+                path:               'create',
                 parentNavigatorKey: _rootKey,
-                builder: (_, __) => const CreateJobScreen(),
+                builder:            (_, __) => const CreateJobScreen(),
               ),
             ],
           ),
           GoRoute(
-            path: '/hr/candidates',
+            path:    '/hr/candidates',
             builder: (_, __) => const CandidatesScreen(),
             routes: [
               GoRoute(
-                path: ':id',
+                path:               ':id',
                 parentNavigatorKey: _rootKey,
                 builder: (_, state) =>
-                    CandidateDetailScreen(candidateId: state.pathParameters['id']!),
+                    CandidateDetailScreen(
+                        candidateId: state.pathParameters['id']!),
               ),
             ],
           ),
           GoRoute(
-            path: '/hr/interviews',
+            path:    '/hr/interviews',
             builder: (_, __) => const InterviewsScreen(),
-          ),
-          GoRoute(
-            path: '/hr/profile',
-            builder: (_, __) => const HRProfileScreen(),
           ),
         ],
       ),
@@ -173,15 +228,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, __, child) => CandidateShell(child: child),
         routes: [
           GoRoute(
-            path: '/candidate',
+            path:    '/candidate',
             builder: (_, __) => const CandidateHomeScreen(),
           ),
           GoRoute(
-            path: '/candidate/jobs',
+            path:    '/candidate/jobs',
             builder: (_, __) => const CandidateJobsScreen(),
             routes: [
               GoRoute(
-                path: ':id',
+                path:               ':id',
                 parentNavigatorKey: _rootKey,
                 builder: (_, state) =>
                     JobDetailScreen(jobId: state.pathParameters['id']!),
@@ -189,23 +244,72 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(
-            path: '/candidate/practice',
+            path:    '/candidate/practice',
             builder: (_, __) => const PracticeScreen(),
             routes: [
               GoRoute(
-                path: 'session',
+                path:               'session',
                 parentNavigatorKey: _rootKey,
-                builder: (_, __) => const PracticeQuestionScreen(),
+                builder:            (_, __) => const PracticeQuestionScreen(),
               ),
             ],
           ),
           GoRoute(
-            path: '/candidate/applications',
+            path:    '/candidate/applications',
             builder: (_, __) => const ApplicationsScreen(),
           ),
           GoRoute(
-            path: '/candidate/profile',
+            path:    '/candidate/profile',
             builder: (_, __) => const CandidateProfileScreen(),
+          ),
+        ],
+      ),
+
+      // ── Jobseeker full-screen routes (outside shell) ──────────────────────
+      GoRoute(
+        path:               '/jobseeker/practice/:id',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) =>
+            PracticeSessionScreen(setId: state.pathParameters['id']!),
+        routes: [
+          GoRoute(
+            path:               'result',
+            parentNavigatorKey: _rootKey,
+            builder: (_, state) =>
+                FeedbackScreen(setId: state.pathParameters['id']!),
+          ),
+        ],
+      ),
+
+      // ── Jobseeker Shell ───────────────────────────────────────────────────
+      ShellRoute(
+        navigatorKey: _jobseekerShellKey,
+        builder: (_, __, child) => JobseekerShell(child: child),
+        routes: [
+          GoRoute(
+            path:    '/jobseeker/dashboard',
+            builder: (_, __) => const JobseekerDashboardScreen(),
+          ),
+          GoRoute(
+            path:    '/jobseeker',
+            builder: (_, __) => const MarketplaceScreen(),
+          ),
+          GoRoute(
+            path:    '/jobseeker/sets/:id',
+            builder: (_, state) =>
+                SetDetailScreen(setId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path:    '/jobseeker/history',
+            builder: (_, __) => const JobseekerHistoryScreen(),
+          ),
+          GoRoute(
+            path:    '/jobseeker/profile',
+            builder: (_, __) => const JobseekerProfileScreen(),
+          ),
+          GoRoute(
+            path:    '/jobseeker/settings',
+            builder: (_, __) => const JobseekerSettingsScreen(),
           ),
         ],
       ),

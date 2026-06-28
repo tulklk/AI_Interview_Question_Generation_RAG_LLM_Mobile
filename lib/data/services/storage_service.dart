@@ -75,6 +75,11 @@ class StorageService {
     await prefs.setBool(_kOnboardingSeen, true);
   }
 
+  static Future<void> saveAccessToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kAccessToken, token);
+  }
+
   // ── Clear ────────────────────────────────────────────────────────────────
 
   static Future<void> clearSession() async {
