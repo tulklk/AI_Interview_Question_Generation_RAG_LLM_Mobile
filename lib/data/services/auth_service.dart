@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import '../../core/constants/app_constants.dart';
 import '../../models/user_model.dart';
 import 'storage_service.dart';
 
@@ -85,21 +87,28 @@ class LoginResult {
 // ── Service ──────────────────────────────────────────────────────────────────
 
 class AuthService {
-  static const _baseUrl =
-      'https://iqgs-be-e2eefsdvd9fydtfx.eastasia-01.azurewebsites.net';
+  static const _baseUrl = AppConstants.apiBaseUrl;
 
-  static final _dio = Dio(BaseOptions(
-    baseUrl: _baseUrl,
-    connectTimeout: const Duration(seconds: 15),
-    receiveTimeout: const Duration(seconds: 15),
-    headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-  ))..interceptors.add(LogInterceptor(
-    requestBody: true,
-    responseBody: true,
-    requestHeader: false,
-    responseHeader: false,
-    logPrint: (o) => print('[AuthService] $o'),
-  ));
+  static Dio _createDio() {
+    final dio = Dio(BaseOptions(
+      baseUrl: _baseUrl,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+    ));
+    if (kDebugMode) {
+      dio.interceptors.add(LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+        requestHeader: false,
+        responseHeader: false,
+        logPrint: (o) => debugPrint('[AuthService] $o'),
+      ));
+    }
+    return dio;
+  }
+
+  static final _dio = _createDio();
 
   // ── Email / password login ──────────────────────────────────────────────
 

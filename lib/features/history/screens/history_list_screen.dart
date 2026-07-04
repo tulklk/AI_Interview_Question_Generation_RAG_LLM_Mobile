@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/i18n/app_localizations.dart';
 import '../../hr_generate/data/generation_api.dart';
+import '../../hr_generate/presentation/providers/generation_provider.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -30,30 +32,53 @@ class HistorySession {
   });
 
   factory HistorySession.fromJson(Map<String, dynamic> j) {
-    final plan = j['planDraft'] ?? j['plan'] ?? const {};
+    final plan  = j['planDraft'] ?? j['plan'] ?? const {};
+    final input = j['input'] is Map ? j['input'] as Map : const {};
+
+    final planRole = plan is Map
+        ? (plan['roleTitle'] ?? plan['role'])?.toString()
+        : null;
+
     return HistorySession(
-      id:            j['id']?.toString() ?? '',
-      jobTitle:      j['jobTitle'] ?? j['title'] as String?,
-      role:          (plan is Map ? plan['roleTitle'] ?? plan['role'] : null)
-                         as String?,
-      level:         (plan is Map ? plan['experienceLevel'] ?? plan['level'] : null)
-                         as String?,
-      difficulty:    (plan is Map ? plan['difficulty'] : null) as String?,
-      status:        j['status']?.toString() ?? 'PENDING',
-      createdAt:     j['createdAt'] != null
+      id:         (j['jobId'] ?? j['id'] ?? j['job_id'])?.toString() ?? '',
+      jobTitle:   j['jobTitle']?.toString()
+          ?? j['title']?.toString()
+          ?? planRole
+          ?? input['jobTitle']?.toString()
+          ?? input['position']?.toString(),
+      role:       planRole,
+      level:      plan is Map
+          ? (plan['experienceLevel'] ?? plan['level'])?.toString()
+          : null,
+      difficulty: plan is Map ? plan['difficulty']?.toString() : null,
+      status:     j['status']?.toString() ?? 'PENDING',
+      createdAt:  j['createdAt'] != null
           ? DateTime.tryParse(j['createdAt'].toString())
           : null,
       questionCount: j['questionCount'] as int?,
     );
   }
 
-  String get displayTitle => jobTitle ?? (role != null ? '$role Interview' : 'Interview');
+  String get displayTitle => jobTitle ?? role ?? 'Interview';
 
   bool get isInProgress =>
       status == 'PROCESSING' ||
       status == 'QUEUED' ||
       status == 'PLAN_GENERATION_IN_PROGRESS' ||
-      status == 'QUESTION_GENERATION_IN_PROGRESS';
+      status == 'QUESTION_GENERATION_IN_PROGRESS' ||
+      status == 'WAITING_HR_APPROVAL' ||
+      status == 'PLAN_PROPOSED' ||
+      status == 'PLAN_QUEUED' ||
+      status == 'CONFIRMED' ||
+      status == 'QUESTION_QUEUED' ||
+      status == 'QUESTION_PROCESSING';
+
+  /// Sessions that should reopen the generate flow at the current step.
+  bool get canResumeGeneration {
+    final s = status.toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
+    const completed = {'COMPLETED', 'DONE', 'SUCCESS'};
+    return !completed.contains(s);
+  }
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -137,6 +162,10 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
           final tb = b.createdAt ?? DateTime(0);
           return tb.compareTo(ta);
         });
+      if (list.isNotEmpty) {
+        debugPrint('[History] first item keys: ${(list.first as Map).keys.toList()}');
+        debugPrint('[History] first item: ${list.first}');
+      }
       state = state.copyWith(sessions: sessions, isLoading: false);
       _maybeStartPoll(sessions);
     } catch (e) {
@@ -147,7 +176,7 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
   void _maybeStartPoll(List<HistorySession> sessions) {
     _poll?.cancel();
     if (!sessions.any((s) => s.isInProgress)) return;
-    _poll = Timer.periodic(const Duration(seconds: 4), (_) async {
+    _poll = Timer.periodic(const Duration(seconds: 10), (_) async {
       if (!state.sessions.any((s) => s.isInProgress)) {
         _poll?.cancel();
         return;
@@ -204,14 +233,18 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
     return [];
   }
 
-  Future<void> deleteSession(String id) async {
+  Future<bool> deleteSession(String id) async {
+    // Optimistic removal — restore on failure
+    final previous = state.sessions;
+    state = state.copyWith(
+        sessions: state.sessions.where((s) => s.id != id).toList());
     try {
       final dio = buildGenerationDio();
-      await dio.delete('/api/hr/question-generation-jobs/$id');
-      state = state.copyWith(
-          sessions: state.sessions.where((s) => s.id != id).toList());
+      await dio.delete('/api/hr/question-generation-plans/$id');
+      return true;
     } catch (e) {
-      state = state.copyWith(error: _err(e));
+      state = state.copyWith(sessions: previous, error: _err(e));
+      return false;
     }
   }
 
@@ -221,9 +254,17 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
 
   static String _err(Object e) {
     if (e is DioException) {
-      final msg = e.response?.data?['message'];
-      if (msg is String) return msg;
-      return 'Network error';
+      final data = e.response?.data;
+      if (data is Map) {
+        final msg = data['message'] ?? data['error'] ?? data['detail'];
+        if (msg is String && msg.isNotEmpty) return msg;
+      }
+      final code = e.response?.statusCode;
+      if (kDebugMode) {
+        debugPrint('[History] API error ${e.type} $code: $data');
+      }
+      if (code != null) return 'Lỗi server ($code). Vui lòng thử lại.';
+      return 'Lỗi kết nối. Vui lòng thử lại.';
     }
     return e.toString();
   }
@@ -259,18 +300,21 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<HistoryState>(historyProvider, (prev, next) {
+      final err = next.error;
+      if (err == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      ref.read(historyProvider.notifier).clearError();
+    });
+
     final isDark   = Theme.of(context).brightness == Brightness.dark;
     final hState   = ref.watch(historyProvider);
     final notifier = ref.read(historyProvider.notifier);
-
-    if (hState.error != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(hState.error!),
-              backgroundColor: const Color(0xFFEF4444)));
-        notifier.clearError();
-      });
-    }
 
     return RefreshIndicator(
       onRefresh: notifier.load,
@@ -375,7 +419,7 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
                         child:   _SessionCard(
                           session:  s,
                           isDark:   isDark,
-                          onView:   () => context.push('/hr/history/${s.id}'),
+                          onView:   () => _openSession(context, s),
                           onDelete: () =>
                               _confirmDelete(context, s, notifier),
                         ),
@@ -390,6 +434,18 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
     );
   }
 
+  Future<void> _openSession(BuildContext context, HistorySession s) async {
+    if (!s.canResumeGeneration) {
+      context.push('/hr/history/${s.id}');
+      return;
+    }
+
+    final jobId = s.id;
+    await ref.read(generationProvider.notifier).resumeJob(jobId);
+    if (!context.mounted) return;
+    context.go('/hr/generate?jobId=${Uri.encodeComponent(jobId)}');
+  }
+
   Future<void> _confirmDelete(
     BuildContext context,
     HistorySession s,
@@ -397,15 +453,15 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
   ) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title:   const Text('Delete session?'),
         content: Text('Remove "${s.displayTitle}"? This cannot be undone.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
               child: const Text('Cancel')),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFEF4444)),
             child: const Text('Delete'),
@@ -413,13 +469,26 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
         ],
       ),
     );
-    if (ok == true) await notifier.deleteSession(s.id);
+    if (ok != true) return;
+    final success = await notifier.deleteSession(s.id);
+    if (!context.mounted) return;
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Đã xóa phiên thành công'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   List<_StatusFilter> _statusFilters(AppLocalizations l) => [
     _StatusFilter(label: l.allSessions,  value: 'ALL'),
     _StatusFilter(label: l.completed,    value: 'COMPLETED'),
-    _StatusFilter(label: 'Plan Ready',   value: 'PLAN_PROPOSED'),
+    const _StatusFilter(label: 'Plan Ready',   value: 'PLAN_PROPOSED'),
     _StatusFilter(label: l.inProgress,   value: 'PROCESSING'),
     _StatusFilter(label: l.failed,       value: 'FAILED'),
   ];

@@ -128,12 +128,12 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
   final GenerationRepository _repo;
   Timer? _pollTimer;
 
-  static const _pollInterval  = Duration(seconds: 3);
-  static const _errorInterval = Duration(seconds: 5);
+  static const _pollInterval  = Duration(seconds: 5);
+  static const _errorInterval = Duration(seconds: 8);
 
-  GenerationNotifier(this._repo) : super(const GenerationState()) {
-    _restore();
-  }
+  GenerationNotifier(this._repo) : super(const GenerationState());
+
+  bool _pollInFlight = false;
 
   @override
   void dispose() {
@@ -145,7 +145,7 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
 
   // ── Session restore ────────────────────────────────────────────────────────
 
-  Future<void> _restore() async {
+  Future<void> restoreFromStorage() async {
     final saved = await GenStorage.load();
     final jobId = saved['jobId'];
     if (jobId == null || jobId.isEmpty) return;
@@ -162,73 +162,124 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
     try {
       final session = await _repo.getSession(jobId);
       if (!mounted) return;
-
-      // Determine correct view from server state
-      final action = (session.suggestedAction ?? '').toUpperCase();
-      final st     = session.status;
-
-      if (session.isPolling) {
-        final phase = st.isPlanPhase ? 'plan' : 'questions';
-        state = state.copyWith(
-            isRestoring: false, session: session,
-            currentView: 'polling', pollingPhase: phase);
-        await GenStorage.save(view: 'polling', pollingPhase: phase);
-        _startPolling(phase);
-        return;
-      }
-
-      if (action == 'REVIEW_PLAN') {
-        state = state.copyWith(
-            isRestoring: false, session: session, currentView: 'plan_review');
-        await GenStorage.save(view: 'plan_review');
-        return;
-      }
-      if (action == 'REVIEW_QUESTIONS' || st == GenerationStatus.completed) {
-        final qs = session.generatedQuestions.isNotEmpty
-            ? session.generatedQuestions
-            : await _repo.getQuestions(jobId);
-        state = state.copyWith(
-            isRestoring: false, session: session,
-            questions: qs, currentView: 'question_review');
-        await GenStorage.save(view: 'question_review');
-        return;
-      }
-      if (action == 'VIEW_DRAFT') {
-        state = state.copyWith(
-            isRestoring: false, session: session, currentView: 'draft_view');
-        await GenStorage.save(view: 'draft_view');
-        return;
-      }
-      if (action == 'RETRY_PLAN' || action == 'RETRY_QUESTIONS' ||
-          action == 'EDIT_INPUT' || st == GenerationStatus.failed) {
-        state = state.copyWith(
-            isRestoring: false, session: session, currentView: 'failed');
-        await GenStorage.save(view: 'failed');
-        return;
-      }
-      if (st.isPlanPhase) {
-        state = state.copyWith(
-            isRestoring: false, session: session,
-            currentView: 'polling', pollingPhase: 'plan');
-        await GenStorage.save(view: 'polling', pollingPhase: 'plan');
-        _startPolling('plan');
-        return;
-      }
-      if (st.isQuestionPhase) {
-        state = state.copyWith(
-            isRestoring: false, session: session,
-            currentView: 'polling', pollingPhase: 'questions');
-        await GenStorage.save(view: 'polling', pollingPhase: 'questions');
-        _startPolling('questions');
-        return;
-      }
-
-      state = state.copyWith(isRestoring: false, session: session);
+      await _applySessionFromServer(session, jobId);
     } catch (_) {
-      // jobId not found or network error → clear and show form
       await GenStorage.clearAll();
       state = const GenerationState();
     }
+  }
+
+  /// Loads a specific job from history and jumps to the correct generate step.
+  Future<void> resumeJob(String jobId) async {
+    if (jobId.isEmpty) return;
+    _cancelPoll();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(GenStorage.kBadgeDismissed);
+
+    state = state.copyWith(
+      jobId:       jobId,
+      isRestoring: true,
+      clearError:  true,
+      clearSession: true,
+      clearLocalPlan: true,
+    );
+    await GenStorage.save(jobId: jobId);
+
+    try {
+      final session = await _repo.getSession(jobId);
+      if (!mounted) return;
+      await _applySessionFromServer(session, jobId);
+    } catch (e) {
+      state = state.copyWith(
+        isRestoring: false,
+        jobId:       jobId,
+        error:       GenerationRepository.friendlyError(e),
+      );
+    }
+  }
+
+  Future<void> _applySessionFromServer(
+    GenerationSession session,
+    String jobId,
+  ) async {
+    final action = (session.suggestedAction ?? '').toUpperCase();
+    final st     = session.status;
+    final raw    = session.rawPhase.toUpperCase()
+        .replaceAll('-', '_')
+        .replaceAll(' ', '_');
+
+    if (session.isPolling) {
+      final phase = st.isPlanPhase ? 'plan' : 'questions';
+      state = state.copyWith(
+          isRestoring: false, session: session,
+          currentView: 'polling', pollingPhase: phase);
+      await GenStorage.save(jobId: jobId, view: 'polling', pollingPhase: phase);
+      _startPolling(phase);
+      return;
+    }
+
+    if (action == 'REVIEW_PLAN' ||
+        st == GenerationStatus.planProposed ||
+        session.isWaitingPlanReview ||
+        raw == 'WAITING_HR_APPROVAL' ||
+        raw == 'PLAN_PROPOSED' ||
+        raw == 'PLANPROPOSED') {
+      state = state.copyWith(
+          isRestoring: false, session: session, currentView: 'plan_review');
+      await GenStorage.save(jobId: jobId, view: 'plan_review');
+      return;
+    }
+    if (action == 'REVIEW_QUESTIONS' || st == GenerationStatus.completed) {
+      final qs = session.generatedQuestions.isNotEmpty
+          ? session.generatedQuestions
+          : await _repo.getQuestions(jobId);
+      state = state.copyWith(
+          isRestoring: false, session: session,
+          questions: qs, currentView: 'question_review');
+      await GenStorage.save(jobId: jobId, view: 'question_review');
+      return;
+    }
+    if (action == 'VIEW_DRAFT') {
+      state = state.copyWith(
+          isRestoring: false, session: session, currentView: 'draft_view');
+      await GenStorage.save(jobId: jobId, view: 'draft_view');
+      return;
+    }
+    if (action == 'RETRY_PLAN' || action == 'RETRY_QUESTIONS' ||
+        action == 'EDIT_INPUT' || st == GenerationStatus.failed) {
+      state = state.copyWith(
+          isRestoring: false, session: session, currentView: 'failed');
+      await GenStorage.save(jobId: jobId, view: 'failed');
+      return;
+    }
+    if (st.isPlanPhase) {
+      state = state.copyWith(
+          isRestoring: false, session: session,
+          currentView: 'polling', pollingPhase: 'plan');
+      await GenStorage.save(jobId: jobId, view: 'polling', pollingPhase: 'plan');
+      _startPolling('plan');
+      return;
+    }
+    if (st.isQuestionPhase) {
+      state = state.copyWith(
+          isRestoring: false, session: session,
+          currentView: 'polling', pollingPhase: 'questions');
+      await GenStorage.save(jobId: jobId, view: 'polling', pollingPhase: 'questions');
+      _startPolling('questions');
+      return;
+    }
+
+    // Plan exists but status was not mapped — still show plan review.
+    if (session.planDraft != null && session.generatedQuestions.isEmpty) {
+      state = state.copyWith(
+          isRestoring: false, session: session, currentView: 'plan_review');
+      await GenStorage.save(jobId: jobId, view: 'plan_review');
+      return;
+    }
+
+    state = state.copyWith(isRestoring: false, session: session);
+    await GenStorage.save(jobId: jobId);
   }
 
   // ── Step 1: Submit job ─────────────────────────────────────────────────────
@@ -250,6 +301,8 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
         questionTypes:   questionTypes,
       );
       if (jobId.isEmpty) throw Exception('Server không trả về job ID');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(GenStorage.kBadgeDismissed);
       state = state.copyWith(
         isLoading:    false,
         jobId:        jobId,
@@ -274,15 +327,23 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
 
   Future<void> _doPoll(String phase) async {
     final jobId = state.jobId;
-    if (jobId == null || !mounted) return;
+    if (jobId == null || !mounted || _pollInFlight) return;
+    _pollInFlight = true;
     try {
       final session = await _repo.getSession(jobId);
       if (!mounted) return;
 
-      state = state.copyWith(
-          session: session,
-          statusLabel: session.statusLabel,
-          clearError: true);
+      final labelChanged = state.statusLabel != session.statusLabel;
+      final sessionChanged = state.session?.rawPhase != session.rawPhase ||
+          state.session?.isPolling != session.isPolling ||
+          state.session?.suggestedAction != session.suggestedAction;
+
+      if (labelChanged || sessionChanged) {
+        state = state.copyWith(
+            session: session,
+            statusLabel: session.statusLabel,
+            clearError: true);
+      }
 
       // isPolling is single source of truth — keep polling
       if (session.isPolling) {
@@ -295,7 +356,8 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
 
       // Plan phase transitions
       if (phase == 'plan') {
-        if (action == 'REVIEW_PLAN') {
+        // REVIEW_PLAN action OR planProposed/WAITING_HR_APPROVAL status
+        if (action == 'REVIEW_PLAN' || st == GenerationStatus.planProposed) {
           await _transitionTo('plan_review', pollingPhase: 'plan',
               session: session);
           return;
@@ -350,6 +412,8 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
       if (!mounted) return;
       state = state.copyWith(error: 'Mất kết nối, đang thử lại...');
       _pollTimer = Timer(_errorInterval, () => _doPoll(phase));
+    } finally {
+      _pollInFlight = false;
     }
   }
 
@@ -374,23 +438,28 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
   Future<void> approvePlan(PlanDraft edited) async {
     final jobId = state.jobId;
     if (jobId == null) return;
-    state = state.copyWith(isLoading: true, clearError: true);
+
+    state = state.copyWith(
+      isLoading:    true,
+      clearError:   true,
+      currentView:  'polling',
+      pollingPhase: 'questions',
+      localPlan:    edited,
+    );
+    await GenStorage.save(
+        view: 'polling', pollingPhase: 'questions', plan: edited);
+
     try {
       await _repo.updatePlan(jobId, edited);
       await _repo.approvePlan(jobId);
-      state = state.copyWith(
-        isLoading:    false,
-        currentView:  'polling',
-        pollingPhase: 'questions',
-        localPlan:    edited,
-      );
-      await GenStorage.save(
-          view: 'polling', pollingPhase: 'questions', plan: edited);
+      state = state.copyWith(isLoading: false, localPlan: edited);
       _startPolling('questions');
     } catch (e) {
       state = state.copyWith(
           isLoading: false,
+          currentView: 'plan_review',
           error: GenerationRepository.friendlyError(e));
+      await GenStorage.save(view: 'plan_review', plan: edited);
     }
   }
 
@@ -503,6 +572,26 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
     }
   }
 
+  // ── Minimize (exit screen, keep session for badge) ─────────────────────────
+
+  Future<void> minimize() async {
+    final jobId = state.jobId;
+    if (jobId == null || jobId.isEmpty || state.currentView == 'form') return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(GenStorage.kBadgeDismissed);
+
+    await GenStorage.save(
+      jobId:        jobId,
+      view:         state.currentView,
+      pollingPhase: state.pollingPhase,
+    );
+
+    if (state.currentView == 'polling' && _pollTimer == null) {
+      _startPolling(state.pollingPhase);
+    }
+  }
+
   // ── Reset ──────────────────────────────────────────────────────────────────
 
   Future<void> reset() async {
@@ -512,6 +601,17 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
   }
 
   void clearError() => state = state.copyWith(clearError: true);
+
+  /// Re-fetches the session when plan_review_view lands with no plan data.
+  Future<void> fetchPlanIfMissing() async {
+    if (state.effectivePlan != null) return;
+    final jobId = state.jobId;
+    if (jobId == null) return;
+    try {
+      final session = await _repo.getSession(jobId);
+      if (mounted) state = state.copyWith(session: session);
+    } catch (_) {}
+  }
 
   void updateLocalPlan(PlanDraft plan) =>
       state = state.copyWith(localPlan: plan);
@@ -528,7 +628,7 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
 final generationRepositoryProvider =
     Provider<GenerationRepository>((ref) => GenerationRepository());
 
-final generationProvider = StateNotifierProvider.autoDispose<
+final generationProvider = StateNotifierProvider<
     GenerationNotifier, GenerationState>((ref) {
   return GenerationNotifier(ref.watch(generationRepositoryProvider));
 });

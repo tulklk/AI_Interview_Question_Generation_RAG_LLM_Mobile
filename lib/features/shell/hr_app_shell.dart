@@ -1,3 +1,4 @@
+import 'dart:math' show cos, pi, sin;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,13 +11,13 @@ import '../../core/widgets/bottom_nav_widgets.dart';
 import '../../features/hr_generate/presentation/widgets/generation_progress_badge.dart';
 
 class HRAppShell extends ConsumerWidget {
-  final Widget child;
+  final StatefulNavigationShell navigationShell;
   final String currentLocation;
 
   const HRAppShell({
     super.key,
     required this.currentLocation,
-    required this.child,
+    required this.navigationShell,
   });
 
   @override
@@ -25,6 +26,17 @@ class HRAppShell extends ConsumerWidget {
     final isWide = MediaQuery.of(context).size.width > 840;
     final showBadge = !currentLocation.startsWith('/hr/generate');
 
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (next.showWelcome) {
+        ref.read(authProvider.notifier).consumeWelcome();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            _showWelcomeDialog(context, next.user?.name ?? 'HR Manager');
+          }
+        });
+      }
+    });
+
     return Scaffold(
       backgroundColor:
           isDark ? const Color(0xFF0A0A14) : const Color(0xFFF4F5FB),
@@ -32,18 +44,22 @@ class HRAppShell extends ConsumerWidget {
       drawer: _HRDrawer(currentLocation: currentLocation),
       body: Stack(
         children: [
-          child,
+          RepaintBoundary(child: navigationShell),
           if (showBadge)
-            const Positioned(
-              bottom: 20,
-              right: 16,
-              child: GenerationProgressBadge(),
+            Positioned(
+              bottom: isWide ? 24 : 88,
+              right:  16,
+              child:  const GenerationProgressBadge(),
             ),
         ],
       ),
       bottomNavigationBar: isWide
           ? null
-          : _HRBottomBar(currentLocation: currentLocation, isDark: isDark),
+          : _HRBottomBar(
+              currentLocation: currentLocation,
+              isDark:          isDark,
+              navigationShell: navigationShell,
+            ),
       floatingActionButton: isWide
           ? null
           : _HRCenterFab(currentLocation: currentLocation),
@@ -660,7 +676,12 @@ class _Badge extends StatelessWidget {
 class _HRBottomBar extends StatelessWidget {
   final String currentLocation;
   final bool   isDark;
-  const _HRBottomBar({required this.currentLocation, required this.isDark});
+  final StatefulNavigationShell navigationShell;
+  const _HRBottomBar({
+    required this.currentLocation,
+    required this.isDark,
+    required this.navigationShell,
+  });
 
   bool _active(String route) {
     if (route == '/hr/dashboard') {
@@ -690,7 +711,7 @@ class _HRBottomBar extends StatelessWidget {
               label:  l10n.dashboard,
               active: _active('/hr/dashboard'),
               isDark: isDark,
-              onTap:  () => context.go('/hr/dashboard'),
+              onTap:  () => navigationShell.goBranch(0),
             ),
           ),
           Expanded(
@@ -699,40 +720,18 @@ class _HRBottomBar extends StatelessWidget {
               label:  l10n.history,
               active: _active('/hr/history'),
               isDark: isDark,
-              onTap:  () => context.go('/hr/history'),
+              onTap:  () => navigationShell.goBranch(1),
             ),
           ),
-          // Gap + label under the FAB notch
-          SizedBox(
-            width:  72,
-            height: 64,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    l10n.generateQuestions,
-                    style: const TextStyle(
-                      fontSize:   10,
-                      color:      Color(0xFF6C47FF),
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines:  1,
-                    overflow:  TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Gap for the FAB notch — no label
+          const SizedBox(width: 72),
           Expanded(
             child: BNItem(
               icon:   Icons.menu_book_rounded,
               label:  l10n.knowledgeBase,
               active: _active('/hr/knowledge'),
               isDark: isDark,
-              onTap:  () => context.go('/hr/knowledge'),
+              onTap:  () => navigationShell.goBranch(2),
             ),
           ),
           Expanded(
@@ -741,7 +740,7 @@ class _HRBottomBar extends StatelessWidget {
               label:  l10n.profile,
               active: _active('/hr/profile'),
               isDark: isDark,
-              onTap:  () => context.go('/hr/profile'),
+              onTap:  () => navigationShell.goBranch(3),
             ),
           ),
         ],
@@ -752,21 +751,224 @@ class _HRBottomBar extends StatelessWidget {
 
 // ── HR Centre FAB ────────────────────────────────────────────────────────────
 
-class _HRCenterFab extends StatelessWidget {
+class _HRCenterFab extends StatefulWidget {
   final String currentLocation;
   const _HRCenterFab({required this.currentLocation});
 
   @override
-  Widget build(BuildContext context) {
-    return FloatingActionButton(
-      onPressed:       () => context.go('/hr/generate'),
-      backgroundColor: const Color(0xFF6C47FF),
-      foregroundColor: Colors.white,
-      elevation:       6,
-      shape:           const CircleBorder(),
-      child:           const Icon(Icons.auto_awesome_rounded, size: 26),
+  State<_HRCenterFab> createState() => _HRCenterFabState();
+}
+
+class _HRCenterFabState extends State<_HRCenterFab>
+    with TickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final AnimationController _glowCtrl;
+  late final AnimationController _iconCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+    _glowCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+    // Icon: appear → breathe → float-away → pause → repeat  (2.4 s)
+    _iconCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    _glowCtrl.dispose();
+    _iconCtrl.dispose();
+    super.dispose();
+  }
+
+  Widget _pulseRing(double phase) {
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      builder: (_, __) {
+        final t = (_pulseCtrl.value + phase) % 1.0;
+        final r = 28.0 + t * 22.0;
+        final alpha = (1.0 - t) * 0.55;
+        return SizedBox(
+          width: r * 2,
+          height: r * 2,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: const Color(0xFF6C47FF).withValues(alpha: alpha),
+                width: 1.5,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.go('/hr/generate'),
+      child: SizedBox(
+        width: 56,
+        height: 56,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            _pulseRing(0.0),
+            _pulseRing(0.5),
+
+            // Background circle + sparkle burst (all via CustomPaint)
+            AnimatedBuilder(
+              animation: Listenable.merge([_glowCtrl, _iconCtrl]),
+              builder: (_, __) => CustomPaint(
+                size: const Size(56, 56),
+                painter: _FabPainter(
+                  glow: _glowCtrl.value,
+                  iconAnim: _iconCtrl.value,
+                ),
+              ),
+            ),
+
+            // Animated icon: appear → breathe → float away
+            AnimatedBuilder(
+              animation: _iconCtrl,
+              builder: (_, __) {
+                final t = _iconCtrl.value;
+                final double scale;
+                final double opacity;
+
+                if (t < 0.18) {
+                  // Bounce in
+                  final p = t / 0.18;
+                  scale   = Curves.easeOutBack.transform(p).clamp(0.0, 1.5);
+                  opacity = (p * 1.6).clamp(0.0, 1.0);
+                } else if (t < 0.58) {
+                  // Hold with subtle breathing bob
+                  final bp = (t - 0.18) / 0.40;
+                  scale   = 1.0 + 0.03 * sin(bp * 2 * pi);
+                  opacity = 1.0;
+                } else if (t < 0.76) {
+                  // Float upward & fade out
+                  final p = (t - 0.58) / 0.18;
+                  scale   = 1.0 + p * 0.42;
+                  opacity = 1.0 - p;
+                } else {
+                  // Blank pause
+                  scale   = 0.0;
+                  opacity = 0.0;
+                }
+
+                return Transform.scale(
+                  scale: scale.clamp(0.0, 1.5),
+                  child: Opacity(
+                    opacity: opacity.clamp(0.0, 1.0),
+                    child: const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: Colors.white,
+                      size: 26,
+                      shadows: [Shadow(color: Color(0x88FFFFFF), blurRadius: 8)],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FabPainter extends CustomPainter {
+  final double glow;
+  final double iconAnim;
+  const _FabPainter({
+    required this.glow,
+    required this.iconAnim,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final rect   = Rect.fromCircle(center: center, radius: radius);
+
+    // Breathing glow — extra burst when icon appears
+    final appearBoost = iconAnim < 0.22 ? (1.0 - iconAnim / 0.22) * 0.30 : 0.0;
+    canvas.drawCircle(
+      center,
+      radius + 2,
+      Paint()
+        ..color = const Color(0xFF6C47FF)
+            .withValues(alpha: (0.35 + 0.25 * glow + appearBoost).clamp(0.0, 1.0))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 + glow * 6),
+    );
+
+    // Static radial gradient fill (no color rotation)
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = const RadialGradient(
+          center: Alignment.topLeft,
+          radius: 1.2,
+          colors: [Color(0xFF8B65FF), Color(0xFF6C47FF)],
+        ).createShader(rect),
+    );
+
+    // Inner top-left highlight
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.35, -0.45),
+          radius: 0.9,
+          colors: [
+            Colors.white.withValues(alpha: 0.22),
+            Colors.transparent,
+          ],
+        ).createShader(rect),
+    );
+
+    // Sparkle burst when icon appears (active 0.02 – 0.44)
+    if (iconAnim > 0.02 && iconAnim < 0.44) {
+      final st = ((iconAnim - 0.02) / 0.42).clamp(0.0, 1.0);
+      // Fade in quickly, then fade out
+      final alpha = (st < 0.25 ? st / 0.25 : 1.0 - (st - 0.25) / 0.75)
+          .clamp(0.0, 1.0);
+      final dotPaint = Paint()..style = PaintingStyle.fill;
+
+      for (int i = 0; i < 8; i++) {
+        final angle = i * pi / 4.0;
+        final dist  = 10.0 + st * 18.0;
+        final dotR  = (i.isEven ? 2.6 : 1.6) * (1.0 - st * 0.35);
+
+        dotPaint.color = Colors.white.withValues(alpha: alpha * 0.88);
+        canvas.drawCircle(
+          Offset(center.dx + dist * cos(angle), center.dy + dist * sin(angle)),
+          dotR.clamp(0.3, 3.0),
+          dotPaint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FabPainter old) =>
+      old.glow != glow || old.iconAnim != iconAnim;
 }
 
 // ── Shared widgets ────────────────────────────────────────────────────────────
@@ -819,4 +1021,95 @@ class _UserAvatar extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Welcome dialog ────────────────────────────────────────────────────────────
+
+void _showWelcomeDialog(BuildContext context, String fullName) {
+  final firstName = fullName.trim().split(' ').first;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
+  showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return Dialog(
+        backgroundColor: isDark ? const Color(0xFF111827) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6C47FF), Color(0xFF3B82F6)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6C47FF).withValues(alpha: 0.35),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.waving_hand_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Chào mừng, $firstName! 🎉',
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF111827),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Bạn đã đăng nhập thành công vào HireGen AI.\nHãy bắt đầu tạo câu hỏi phỏng vấn ngay!',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF6C47FF),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
+                  child: const Text(
+                    'Bắt đầu',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }

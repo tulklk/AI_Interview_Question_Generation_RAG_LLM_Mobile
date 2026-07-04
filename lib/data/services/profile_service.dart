@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../../core/constants/app_constants.dart';
 import '../../models/user_model.dart';
 
 class ProfileException implements Exception {
@@ -7,8 +8,7 @@ class ProfileException implements Exception {
 }
 
 class ProfileService {
-  static const _baseUrl =
-      'https://iqgs-be-e2eefsdvd9fydtfx.eastasia-01.azurewebsites.net';
+  static const _baseUrl = AppConstants.apiBaseUrl;
 
   static Dio _dio(String token) => Dio(BaseOptions(
         baseUrl: _baseUrl,

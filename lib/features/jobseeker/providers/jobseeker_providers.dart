@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../data/providers/app_providers.dart';
 import '../../../data/services/storage_service.dart';
 import '../data/jobseeker_mock.dart';
@@ -41,8 +42,7 @@ class CandidateProfileNotifier extends StateNotifier<CandidateProfileState> {
 
   final Ref _ref;
 
-  static const _baseUrl =
-      'https://iqgs-be-e2eefsdvd9fydtfx.eastasia-01.azurewebsites.net';
+  static const _baseUrl = AppConstants.apiBaseUrl;
 
   Dio _dio(String token) => Dio(BaseOptions(
         baseUrl: _baseUrl,

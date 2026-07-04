@@ -9,6 +9,7 @@ import '../widgets/auth_background.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/shimmer_button.dart';
 import '../widgets/auth_text_field.dart';
+import '../widgets/auth_widgets.dart' hide AuthBackground;
 
 class ResetPasswordScreen extends StatefulWidget {
   /// Token delivered via deep-link query param: /reset-password?token=xxx
@@ -193,7 +194,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
                     // General error banner
                     if (_generalError != null) ...[
-                      _ErrorBanner(
+                      AuthErrorBanner(
                         message: _generalError!,
                         isDark: isDark,
                       ).animate().fadeIn(duration: 250.ms).slideY(
@@ -287,33 +288,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-class _ErrorBanner extends StatelessWidget {
-  final String message;
-  final bool isDark;
-  const _ErrorBanner({required this.message, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
-        ),
-        child: Row(children: [
-          const Icon(PhosphorIconsBold.warningCircle,
-              size: 16, color: AppColors.error),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(message,
-                style: AppTextStyles.caption.copyWith(
-                    color: AppColors.error, fontWeight: FontWeight.w600)),
-          ),
-        ]),
-      );
-}
 
 class _EyeButton extends StatelessWidget {
   final bool show;

@@ -148,7 +148,7 @@ class KnowledgeNotifier extends StateNotifier<KnowledgeState> {
 
   void _startPoll() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) async {
       if (!state.docs.any((d) => d.isInProgress)) return;
       try {
         final dio  = buildGenerationDio();
@@ -266,27 +266,40 @@ class KnowledgeScreen extends ConsumerStatefulWidget {
 
 class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
   final _searchCtrl = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
+  void _onSearchChanged(String q) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      ref.read(knowledgeProvider.notifier).setSearch(q);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<KnowledgeState>(knowledgeProvider, (prev, next) {
+      final err = next.error;
+      if (err == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      ref.read(knowledgeProvider.notifier).clearError();
+    });
+
     final isDark  = Theme.of(context).brightness == Brightness.dark;
     final kState  = ref.watch(knowledgeProvider);
     final notifier = ref.read(knowledgeProvider.notifier);
-
-    if (kState.error != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(kState.error!),
-              backgroundColor: const Color(0xFFEF4444)));
-        notifier.clearError();
-      });
-    }
 
     return RefreshIndicator(
       onRefresh: notifier.load,
@@ -332,7 +345,7 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
                 _SearchField(
                   controller: _searchCtrl,
                   isDark:     isDark,
-                  onChanged: (q) => notifier.setSearch(q),
+                  onChanged: _onSearchChanged,
                 ),
                 const SizedBox(height: 14),
 

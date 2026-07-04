@@ -37,4 +37,10 @@ class AppConstants {
   // Role keys
   static const String roleHR = 'hr_manager';
   static const String roleCandidate = 'candidate';
+
+  // API
+  static const String apiBaseUrl =
+      'https://iqgs-be-e2eefsdvd9fydtfx.eastasia-01.azurewebsites.net';
+  static const String googleServerClientId =
+      '593842710212-vg9t701m2prpeh0g4sq5maspreuvjmm7.apps.googleusercontent.com';
 }

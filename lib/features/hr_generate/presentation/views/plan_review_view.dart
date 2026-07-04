@@ -38,6 +38,17 @@ class _PlanReviewViewState extends ConsumerState<PlanReviewView> {
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    // If we land here without plan data, re-fetch the session once
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.read(generationProvider).effectivePlan == null) {
+        ref.read(generationProvider.notifier).fetchPlanIfMissing();
+      }
+    });
+  }
+
   void _initFromPlan(PlanDraft plan) {
     if (_initialized) return;
     _initialized   = true;
@@ -86,7 +97,13 @@ class _PlanReviewViewState extends ConsumerState<PlanReviewView> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(generationProvider);
+    final state = ref.watch(
+      generationProvider.select((s) => (
+        isLoading: s.isLoading,
+        error: s.error,
+        effectivePlan: s.effectivePlan,
+      )),
+    );
     final plan  = state.effectivePlan;
     final c     = GenColors.of(context);
 

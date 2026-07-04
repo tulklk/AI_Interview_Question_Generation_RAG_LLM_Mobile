@@ -86,6 +86,15 @@ class AppLocalizations {
   String get createAIQuestions  => isVi ? 'Tạo câu hỏi AI'        : 'Create AI Questions';
   String get restoringSession   => isVi ? 'Đang khôi phục phiên...' : 'Restoring session...';
 
+  // Progress badge (floating, when user exits generate flow)
+  String get badgePollingPlan      => isVi ? 'Đang tạo plan...'              : 'Creating plan...';
+  String get badgePollingQuestions => isVi ? 'Đang tạo câu hỏi...'            : 'Generating questions...';
+  String get badgePlanReady        => isVi ? 'Plan sẵn sàng — Nhấn để duyệt'  : 'Plan ready — Tap to review';
+  String get badgeQuestionsReady   => isVi ? 'Câu hỏi xong — Nhấn để xem'     : 'Questions ready — Tap to view';
+  String get badgeFailed           => isVi ? 'Tạo thất bại — Nhấn để xử lý'   : 'Generation failed — Tap to retry';
+  String get badgeDraftSaved       => isVi ? 'Draft đã lưu'                   : 'Draft saved';
+  String get badgeProcessing       => isVi ? 'Đang xử lý...'                  : 'Processing...';
+
   // Step labels
   String get stepInputJD     => isVi ? 'Nhập JD'     : 'Input JD';
   String get stepCreatePlan  => isVi ? 'Tạo Plan'    : 'Create Plan';

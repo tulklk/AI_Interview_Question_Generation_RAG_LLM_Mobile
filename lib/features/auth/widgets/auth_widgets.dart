@@ -5,6 +5,60 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_logo.dart';
+import '../../../data/services/auth_service.dart' show AuthErrorType;
+
+// ─── Error banner ────────────────────────────────────────────────────────────
+
+class AuthErrorBanner extends StatelessWidget {
+  final String message;
+  final bool isDark;
+  final AuthErrorType? type;
+
+  const AuthErrorBanner({
+    super.key,
+    required this.message,
+    required this.isDark,
+    this.type,
+  });
+
+  IconData get _icon {
+    switch (type) {
+      case AuthErrorType.notVerified:
+        return PhosphorIconsBold.envelopeSimple;
+      case AuthErrorType.accountLocked:
+        return PhosphorIconsBold.lockSimple;
+      case AuthErrorType.networkError:
+        return PhosphorIconsBold.wifiSlash;
+      default:
+        return PhosphorIconsBold.warningCircle;
+    }
+  }
+
+  Color get _color {
+    if (type == AuthErrorType.notVerified) return AppColors.amber;
+    return AppColors.error;
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+      color: _color.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: _color.withValues(alpha: 0.30)),
+    ),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Icon(_icon, size: 16, color: _color),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(message,
+            style: AppTextStyles.caption.copyWith(
+                color: _color, fontWeight: FontWeight.w500, height: 1.4)),
+      ),
+    ]),
+  );
+}
 
 // ─── Logo ────────────────────────────────────────────────────────────────────
 
@@ -216,34 +270,40 @@ class AuthSocialButton extends StatelessWidget {
   final String label;
   final Widget leading;
   final bool isDark;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final double height;
 
   const AuthSocialButton({
     super.key,
     required this.label,
     required this.leading,
     required this.isDark,
-    required this.onTap,
+    this.onTap,
+    this.height = 44,
   });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A2235) : AppColors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB)),
+  Widget build(BuildContext context) => AnimatedOpacity(
+    duration: const Duration(milliseconds: 150),
+    opacity: onTap != null ? 1.0 : 0.45,
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1A2235) : AppColors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB)),
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          leading,
+          const SizedBox(width: 8),
+          Text(label, style: AppTextStyles.label.copyWith(
+            color: isDark ? AppColors.white : AppColors.nearBlack,
+            fontSize: 13, fontWeight: FontWeight.w600)),
+        ]),
       ),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        leading,
-        const SizedBox(width: 8),
-        Text(label, style: AppTextStyles.label.copyWith(
-          color: isDark ? AppColors.white : AppColors.nearBlack,
-          fontSize: 13, fontWeight: FontWeight.w600)),
-      ]),
     ),
   );
 }

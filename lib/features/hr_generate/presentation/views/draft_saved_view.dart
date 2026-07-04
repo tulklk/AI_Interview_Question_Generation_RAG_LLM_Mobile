@@ -9,6 +9,7 @@ class DraftSavedView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final state    = ref.watch(generationProvider);
     final notifier = ref.read(generationProvider.notifier);
     final c        = GenColors.of(context);
 
@@ -59,11 +60,16 @@ class DraftSavedView extends ConsumerWidget {
               height: 50,
               child:  ElevatedButton.icon(
                 onPressed: () {
+                  final jobId = state.jobId;
                   notifier.reset();
-                  context.go('/hr/questions');
+                  if (jobId != null) {
+                    context.go('/hr/history/$jobId');
+                  } else {
+                    context.go('/hr/history');
+                  }
                 },
-                icon:  const Icon(Icons.library_books_rounded, size: 20),
-                label: const Text('Xem thư viện câu hỏi',
+                icon:  const Icon(Icons.history_rounded, size: 20),
+                label: const Text('Xem lịch sử bộ câu hỏi',
                     style: TextStyle(
                         fontSize:   14,
                         fontWeight: FontWeight.w700)),

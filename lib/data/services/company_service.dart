@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../../core/constants/app_constants.dart';
 import 'storage_service.dart';
 
 class CompanyModel {
@@ -14,8 +15,7 @@ class CompanyModel {
 }
 
 class CompanyService {
-  static const _baseUrl =
-      'https://iqgs-be-e2eefsdvd9fydtfx.eastasia-01.azurewebsites.net';
+  static const _baseUrl = AppConstants.apiBaseUrl;
 
   static final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,

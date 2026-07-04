@@ -7,6 +7,7 @@ class GenerationSession {
   final String jobTitle;
   final String? jdContent;
   final GenerationStatus status;
+  final String rawPhase;
   final PlanDraft? planDraft;
   final List<GeneratedQuestion> generatedQuestions;
   final String? failureMessage;
@@ -29,6 +30,7 @@ class GenerationSession {
     required this.jobTitle,
     this.jdContent,
     required this.status,
+    this.rawPhase = '',
     this.planDraft,
     this.generatedQuestions = const [],
     this.failureMessage,
@@ -50,15 +52,23 @@ class GenerationSession {
     final j = _unwrap(raw);
 
     final id = (j['jobId'] ?? j['id'] ?? j['job_id'] ?? '').toString();
-    final jdContent = j['jobDescription']?.toString();
+
+    // jobDescription may be nested under 'input' block
+    final inputMap  = j['input'] as Map<String, dynamic>?;
+    final jdContent = (j['jobDescription']
+        ?? inputMap?['jobDescription']
+        ?? inputMap?['jd'])
+        ?.toString();
 
     // Status / phase
     final rawPhase = (j['phase'] ?? j['status'] ?? '').toString();
     final status   = GenerationStatus.fromPhase(rawPhase);
 
-    // Plan
+    // Plan — may be under 'plan', 'planDraft', or 'planInfo'
     PlanDraft? planDraft;
-    final rawPlan = j['plan'] as Map<String, dynamic>?;
+    final rawPlan = (j['plan']
+        ?? j['planDraft']
+        ?? j['planInfo']) as Map<String, dynamic>?;
     if (rawPlan != null) {
       planDraft = PlanDraft.fromJson(rawPlan);
     }
@@ -73,17 +83,17 @@ class GenerationSession {
         : <GeneratedQuestion>[];
     questions.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
 
-    // UI block
-    final ui      = j['ui'] as Map<String, dynamic>?;
-    final isPolling     = ui?['isPolling'] as bool? ?? false;
-    final statusLabel   = ui?['statusLabel']?.toString();
-    final suggestedAction = ui?['suggestedAction']?.toString();
-    final actions = ui?['actions'] as Map<String, dynamic>?;
+    // UI block — some APIs return these at top-level when no 'ui' wrapper
+    final ui            = j['ui'] as Map<String, dynamic>?;
+    final isPolling     = ui?['isPolling']      as bool?   ?? j['isPolling']      as bool?   ?? false;
+    final statusLabel   = (ui?['statusLabel']   ?? j['statusLabel'])?.toString();
+    final suggestedAction = (ui?['suggestedAction'] ?? j['suggestedAction'])?.toString();
+    final actions       = (ui?['actions']       ?? j['actions']) as Map<String, dynamic>?;
 
-    // Meta block
-    final meta    = j['meta'] as Map<String, dynamic>?;
-    final hasDraft = meta?['hasDraft'] as bool? ?? false;
-    final questionSetId = meta?['questionSetId']?.toString();
+    // Meta block — also check top-level
+    final meta         = j['meta'] as Map<String, dynamic>?;
+    final hasDraft     = meta?['hasDraft']     as bool? ?? j['hasDraft']     as bool? ?? false;
+    final questionSetId= (meta?['questionSetId'] ?? j['questionSetId'])?.toString();
 
     // Failure
     final failure = j['failure'] as Map<String, dynamic>?;
@@ -96,6 +106,7 @@ class GenerationSession {
       jobTitle:          planDraft?.role ?? jdContent?.split('\n').first ?? '',
       jdContent:         jdContent,
       status:            status,
+      rawPhase:          rawPhase,
       planDraft:         planDraft,
       generatedQuestions: questions,
       failureMessage:    failureMessage,
@@ -115,11 +126,27 @@ class GenerationSession {
   }
 
   static Map<String, dynamic> _unwrap(dynamic raw) {
-    if (raw is Map<String, dynamic>) {
-      if (raw['data'] is Map<String, dynamic>) return raw['data'] as Map<String, dynamic>;
-      if (raw['result'] is Map<String, dynamic>) return raw['result'] as Map<String, dynamic>;
-      return raw;
+    if (raw is! Map<String, dynamic>) return {};
+    var m = raw;
+    for (var i = 0; i < 4; i++) {
+      if (m['data'] is Map<String, dynamic>) {
+        m = m['data'] as Map<String, dynamic>;
+        continue;
+      }
+      if (m['result'] is Map<String, dynamic>) {
+        m = m['result'] as Map<String, dynamic>;
+        continue;
+      }
+      break;
     }
-    return {};
+    return m;
+  }
+
+  bool get isWaitingPlanReview {
+    final s = rawPhase.toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
+    return s == 'WAITING_HR_APPROVAL' ||
+        s == 'PLAN_PROPOSED' ||
+        s == 'PLANPROPOSED' ||
+        canApprovePlan;
   }
 }

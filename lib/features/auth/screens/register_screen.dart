@@ -6,13 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/auth_animations.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/providers/app_providers.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/company_service.dart';
-import '../../../models/user_model.dart';
 import '../widgets/auth_background.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/shimmer_button.dart';
@@ -96,8 +96,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       _clearStep1Errors();
       _clearStep2Errors();
     });
-    ref.read(selectedRoleProvider.notifier).state =
-        index == 0 ? UserRole.hrManager : UserRole.candidate;
   }
 
   void _clearStep1Errors() {
@@ -220,8 +218,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   Future<void> _continueWithGoogle() async {
     try {
       final account = await GoogleSignIn(
-        serverClientId:
-            '593842710212-vg9t701m2prpeh0g4sq5maspreuvjmm7.apps.googleusercontent.com',
+        serverClientId: AppConstants.googleServerClientId,
       ).signIn();
       if (account == null) return;
 
@@ -360,7 +357,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
                   // API error banner
                   if (_apiError != null) ...[
-                    _ErrorBanner(message: _apiError!, isDark: isDark)
+                    AuthErrorBanner(message: _apiError!, isDark: isDark)
                         .animate()
                         .fadeIn(duration: 250.ms)
                         .slideY(begin: -0.2, end: 0),
@@ -445,10 +442,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
                   // Social (only step 1)
                   if (_step == 1) ...[
-                    _OrDivider(isDark: isDark, text: 'hoặc tiếp tục với'),
+                    AuthOrDivider(isDark: isDark, text: 'hoặc tiếp tục với'),
                     const SizedBox(height: 14),
-                    _SocialRow(
-                        isDark: isDark, onGoogleTap: _continueWithGoogle),
+                    AuthSocialButton(
+                      label: 'Tiếp tục với Google',
+                      leading: const GoogleLogoIcon(),
+                      isDark: isDark,
+                      onTap: _continueWithGoogle,
+                      height: 48,
+                    ),
                     const SizedBox(height: 18),
                   ],
 
@@ -1403,111 +1405,3 @@ class _CandidateStep2Form extends StatelessWidget {
       );
 }
 
-// ─── Error banner ─────────────────────────────────────────────────────────────
-
-class _ErrorBanner extends StatelessWidget {
-  final String message;
-  final bool isDark;
-  const _ErrorBanner({required this.message, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.error.withValues(alpha: 0.30)),
-        ),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Icon(PhosphorIconsBold.warningCircle,
-              size: 16, color: AppColors.error),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(message,
-                style: AppTextStyles.caption.copyWith(
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w500,
-                    height: 1.4)),
-          ),
-        ]),
-      );
-}
-
-// ─── Divider + social ─────────────────────────────────────────────────────────
-
-class _OrDivider extends StatelessWidget {
-  final bool isDark;
-  final String text;
-  const _OrDivider({required this.isDark, required this.text});
-
-  @override
-  Widget build(BuildContext context) => Row(children: [
-        Expanded(
-            child: Divider(
-                color: isDark
-                    ? const Color(0xFF374151)
-                    : const Color(0xFFE5E7EB))),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(text,
-              style: AppTextStyles.caption
-                  .copyWith(color: AppColors.gray400, fontSize: 12)),
-        ),
-        Expanded(
-            child: Divider(
-                color: isDark
-                    ? const Color(0xFF374151)
-                    : const Color(0xFFE5E7EB))),
-      ]);
-}
-
-class _SocialRow extends StatelessWidget {
-  final bool isDark;
-  final VoidCallback onGoogleTap;
-  const _SocialRow({required this.isDark, required this.onGoogleTap});
-
-  @override
-  Widget build(BuildContext context) => _SocialBtn(
-        label: 'Google',
-        icon: const GoogleLogoIcon(),
-        isDark: isDark,
-        onTap: onGoogleTap,
-      );
-}
-
-class _SocialBtn extends StatelessWidget {
-  final String label;
-  final Widget icon;
-  final bool isDark;
-  final VoidCallback onTap;
-  const _SocialBtn(
-      {required this.label,
-      required this.icon,
-      required this.isDark,
-      required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1A2235) : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: isDark
-                    ? const Color(0xFF374151)
-                    : const Color(0xFFE5E7EB)),
-          ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            icon,
-            const SizedBox(width: 10),
-            Text('Tiếp tục với $label',
-                style: AppTextStyles.label.copyWith(
-                    color: isDark ? Colors.white : AppColors.nearBlack,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
-          ]),
-        ),
-      );
-}

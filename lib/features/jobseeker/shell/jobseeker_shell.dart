@@ -79,6 +79,17 @@ class _JobseekerShellState extends ConsumerState<JobseekerShell> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final l10n = context.l10n;
 
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (next.showWelcome) {
+        ref.read(authProvider.notifier).consumeWelcome();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            _showWelcomeDialog(context, next.user?.name ?? 'Ứng viên');
+          }
+        });
+      }
+    });
+
     if (isTablet) {
       return Scaffold(
         backgroundColor: isDark ? const Color(0xFF070A13) : const Color(0xFFF4F5FB),
@@ -1014,4 +1025,89 @@ class _JobseekerCenterFab extends StatelessWidget {
       child: const Icon(Icons.play_arrow_rounded, size: 28),
     );
   }
+}
+
+// ── Welcome dialog ────────────────────────────────────────────────────────────
+
+void _showWelcomeDialog(BuildContext context, String fullName) {
+  final firstName = fullName.trim().split(' ').first;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
+  showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) => Dialog(
+      backgroundColor: isDark ? const Color(0xFF111827) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6C47FF), Color(0xFF3B82F6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6C47FF).withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.waving_hand_rounded,
+                color: Colors.white,
+                size: 36,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Chào mừng, $firstName! 🎉',
+              style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF111827),
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Bạn đã đăng nhập thành công vào HireGen AI.\nChúc bạn luyện tập hiệu quả!',
+              style: TextStyle(
+                color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                fontSize: 13,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C47FF),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                ),
+                child: const Text(
+                  'Bắt đầu',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

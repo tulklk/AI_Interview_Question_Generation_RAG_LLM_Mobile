@@ -132,12 +132,20 @@ class GenerationRepository {
   }
 
   static Map<String, dynamic> _unwrap(dynamic raw) {
-    if (raw is Map<String, dynamic>) {
-      if (raw['data'] is Map<String, dynamic>) return raw['data'] as Map<String, dynamic>;
-      if (raw['result'] is Map<String, dynamic>) return raw['result'] as Map<String, dynamic>;
-      return raw;
+    if (raw is! Map<String, dynamic>) return {};
+    var m = raw;
+    for (var i = 0; i < 4; i++) {
+      if (m['data'] is Map<String, dynamic>) {
+        m = m['data'] as Map<String, dynamic>;
+        continue;
+      }
+      if (m['result'] is Map<String, dynamic>) {
+        m = m['result'] as Map<String, dynamic>;
+        continue;
+      }
+      break;
     }
-    return {};
+    return m;
   }
 
   static List<GeneratedQuestion> _parseQuestions(dynamic raw) {

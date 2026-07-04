@@ -6,9 +6,12 @@ import 'app_colors.dart';
 class AppTheme {
   AppTheme._();
 
+  static final _fontFamily = GoogleFonts.beVietnamPro().fontFamily;
+
   static ThemeData get light => ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
+        fontFamily: _fontFamily,
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.brandPurple,
           brightness: Brightness.light,
@@ -112,6 +115,7 @@ class AppTheme {
   static ThemeData get dark => ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
+        fontFamily: _fontFamily,
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.brandPurple,
           brightness: Brightness.dark,

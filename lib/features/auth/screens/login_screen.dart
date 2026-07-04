@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/auth_animations.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -90,8 +91,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _loginWithGoogle() async {
     try {
       final account = await GoogleSignIn(
-        serverClientId:
-            '593842710212-vg9t701m2prpeh0g4sq5maspreuvjmm7.apps.googleusercontent.com',
+        serverClientId: AppConstants.googleServerClientId,
       ).signIn();
       if (account == null) return;
 
@@ -197,7 +197,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                     // API error banner
                     if (authState.error != null)
-                      _ErrorBanner(
+                      AuthErrorBanner(
                         message: authState.error!,
                         type: authState.errorType,
                         isDark: isDark,
@@ -262,7 +262,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 20),
 
                     // Divider
-                    _OrDivider(isDark: isDark, text: 'hoặc tiếp tục với')
+                    AuthOrDivider(isDark: isDark, text: 'hoặc tiếp tục với')
                         .animate().fadeIn(delay: 860.ms),
                     const SizedBox(height: 14),
 
@@ -313,57 +313,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
-}
-
-// ─── Error banner ─────────────────────────────────────────────────────────────
-
-class _ErrorBanner extends StatelessWidget {
-  final String message;
-  final AuthErrorType? type;
-  final bool isDark;
-
-  const _ErrorBanner({required this.message, this.type, required this.isDark});
-
-  IconData get _icon {
-    switch (type) {
-      case AuthErrorType.notVerified:
-        return PhosphorIconsBold.envelopeSimple;
-      case AuthErrorType.accountLocked:
-        return PhosphorIconsBold.lockSimple;
-      case AuthErrorType.networkError:
-        return PhosphorIconsBold.wifiSlash;
-      default:
-        return PhosphorIconsBold.warningCircle;
-    }
-  }
-
-  Color get _color {
-    if (type == AuthErrorType.notVerified) return AppColors.amber;
-    return AppColors.error;
-  }
-
-  @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    decoration: BoxDecoration(
-      color: _color.withValues(alpha: 0.10),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: _color.withValues(alpha: 0.30)),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(_icon, size: 16, color: _color),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(message,
-              style: AppTextStyles.caption.copyWith(
-                  color: _color, fontWeight: FontWeight.w500, height: 1.4)),
-        ),
-      ],
-    ),
-  );
 }
 
 // ─── Success banner (post password-reset) ─────────────────────────────────────
@@ -476,27 +425,6 @@ class _RememberMe extends StatelessWidget {
       );
 }
 
-// ─── Divider ─────────────────────────────────────────────────────────────────
-
-class _OrDivider extends StatelessWidget {
-  final bool isDark;
-  final String text;
-  const _OrDivider({required this.isDark, required this.text});
-
-  @override
-  Widget build(BuildContext context) => Row(children: [
-        Expanded(child: Divider(
-            color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB))),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(text,
-              style: AppTextStyles.caption.copyWith(
-                  color: AppColors.gray400, fontSize: 12))),
-        Expanded(child: Divider(
-            color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB))),
-      ]);
-}
-
 // ─── Social row ───────────────────────────────────────────────────────────────
 
 class _SocialRow extends StatelessWidget {
@@ -508,9 +436,9 @@ class _SocialRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(children: [
         Expanded(
-          child: _SocialBtn(
+          child: AuthSocialButton(
             label: 'Google',
-            icon: googleLoading
+            leading: googleLoading
                 ? const SizedBox(
                     width: 18, height: 18,
                     child: CircularProgressIndicator(
@@ -523,54 +451,14 @@ class _SocialRow extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _SocialBtn(
+          child: AuthSocialButton(
             label: 'Microsoft',
-            icon: Icon(PhosphorIconsBold.microsoftOutlookLogo,
+            leading: Icon(PhosphorIconsBold.microsoftOutlookLogo,
                 size: 18,
                 color: isDark ? Colors.white : const Color(0xFF0078D4)),
             isDark: isDark,
-            onTap: null, // Coming soon — no Microsoft OAuth endpoint yet
+            onTap: null,
           ),
         ),
       ]);
-}
-
-class _SocialBtn extends StatelessWidget {
-  final String label;
-  final Widget icon;
-  final bool isDark;
-  final VoidCallback? onTap;
-  const _SocialBtn(
-      {required this.label, required this.icon,
-       required this.isDark, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 150),
-        opacity: enabled ? 1.0 : 0.45,
-        child: Container(
-          height: 44,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1A2235) : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: isDark
-                    ? const Color(0xFF374151)
-                    : const Color(0xFFE5E7EB)),
-          ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            icon, const SizedBox(width: 8),
-            Text(label,
-                style: AppTextStyles.label.copyWith(
-                    color: isDark ? Colors.white : AppColors.nearBlack,
-                    fontSize: 13, fontWeight: FontWeight.w600)),
-          ]),
-        ),
-      ),
-    );
-  }
 }

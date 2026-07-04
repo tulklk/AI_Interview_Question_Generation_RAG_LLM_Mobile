@@ -21,8 +21,6 @@ dependencies:
 
   # UI & Animation
   flutter_animate: ^4.5.0
-  shimmer: ^3.0.0
-  lottie: ^3.1.2
 
   # Icons
   phosphor_flutter: ^2.1.0
@@ -42,14 +40,10 @@ dependencies:
   # Utils
   shared_preferences: ^2.3.0
   intl: ^0.20.2
-  uuid: ^4.4.2
   file_picker: ^8.1.2
 
   # Misc
-  cached_network_image: ^3.3.1
   flutter_svg: ^2.0.10+1
-  confetti: ^0.7.0
-  smooth_page_indicator: ^1.2.0+3
 
 dev_dependencies:
   flutter_test:

@@ -42,10 +42,14 @@ import '../../features/jobseeker/screens/history/jobseeker_history_screen.dart';
 import '../../features/jobseeker/screens/profile/jobseeker_profile_screen.dart';
 import '../../features/jobseeker/screens/settings/jobseeker_settings_screen.dart';
 
-final _rootKey              = GlobalKey<NavigatorState>();
-final _hrShellKey           = GlobalKey<NavigatorState>();
-final _candidateShellKey    = GlobalKey<NavigatorState>();
-final _jobseekerShellKey    = GlobalKey<NavigatorState>();
+final _rootKey           = GlobalKey<NavigatorState>();
+// HR tab branch keys — one per bottom-nav slot
+final _hrDashKey         = GlobalKey<NavigatorState>(debugLabel: 'hr_dash');
+final _hrHistKey         = GlobalKey<NavigatorState>(debugLabel: 'hr_hist');
+final _hrKnowKey         = GlobalKey<NavigatorState>(debugLabel: 'hr_know');
+final _hrProfKey         = GlobalKey<NavigatorState>(debugLabel: 'hr_prof');
+final _candidateShellKey = GlobalKey<NavigatorState>();
+final _jobseekerShellKey = GlobalKey<NavigatorState>();
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._ref) {
@@ -94,6 +98,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Redirect legacy root /hr to /hr/dashboard
       if (loc == '/hr') return '/hr/dashboard';
 
+      // Legacy alias used by older generate flow
+      if (loc == '/hr/questions') return '/hr/history';
+
       return null;
     },
     routes: [
@@ -119,23 +126,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path:               '/hr/generate',
         parentNavigatorKey: _rootKey,
-        builder:            (_, __) => const GenerateScreen(),
+        builder: (_, state) => GenerateScreen(
+          key: ValueKey(state.uri.toString()),
+          resumeJobId: state.uri.queryParameters['jobId'],
+        ),
       ),
       // Legacy alias
       GoRoute(
         path:               '/hr/ai-generator',
         parentNavigatorKey: _rootKey,
-        builder:            (_, __) => const GenerateScreen(),
+        builder: (_, state) => GenerateScreen(
+          key: ValueKey(state.uri.toString()),
+          resumeJobId: state.uri.queryParameters['jobId'],
+        ),
       ),
       GoRoute(
         path:               '/hr/ai-generator/plan/:jobId',
         parentNavigatorKey: _rootKey,
-        redirect:           (_, __) => '/hr/generate',
+        redirect: (_, state) =>
+            '/hr/generate?jobId=${Uri.encodeComponent(state.pathParameters['jobId']!)}',
       ),
       GoRoute(
         path:               '/hr/ai-generator/questions/:jobId',
         parentNavigatorKey: _rootKey,
-        redirect:           (_, __) => '/hr/generate',
+        redirect: (_, state) =>
+            '/hr/generate?jobId=${Uri.encodeComponent(state.pathParameters['jobId']!)}',
       ),
 
       // ── History detail — full-screen outside shell ────────────────────────
@@ -146,78 +161,86 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             HistoryDetailScreen(sessionId: state.pathParameters['id']!),
       ),
 
-      // ── HR Shell ──────────────────────────────────────────────────────────
-      ShellRoute(
-        navigatorKey: _hrShellKey,
-        builder: (_, state, child) => HRAppShell(
+      // ── HR Shell (StatefulShellRoute keeps each tab alive) ───────────────
+      StatefulShellRoute.indexedStack(
+        builder: (_, state, shell) => HRAppShell(
           currentLocation: state.matchedLocation,
-          child:           child,
+          navigationShell: shell,
         ),
-        routes: [
-          // Root → redirect
-          GoRoute(
-            path:     '/hr',
-            redirect: (_, __) => '/hr/dashboard',
-          ),
-
-          // Dashboard
-          GoRoute(
-            path:    '/hr/dashboard',
-            builder: (_, __) => const dash.HRDashboardScreen(),
-          ),
-
-          // History list
-          GoRoute(
-            path:    '/hr/history',
-            builder: (_, __) => const HistoryListScreen(),
-          ),
-
-          // Knowledge Base
-          GoRoute(
-            path:    '/hr/knowledge',
-            builder: (_, __) => const KnowledgeScreen(),
-          ),
-
-          // Settings
-          GoRoute(
-            path:    '/hr/settings',
-            builder: (_, __) => const SettingsScreen(),
-          ),
-
-          // HR Profile
-          GoRoute(
-            path:    '/hr/profile',
-            builder: (_, __) => const HRProfileScreen(),
-          ),
-
-          // Existing HR sub-routes (kept for backward compat)
-          GoRoute(
-            path:    '/hr/jobs',
-            builder: (_, __) => const JobsScreen(),
+        branches: [
+          // ── Branch 0: Dashboard (+ legacy HR routes) ──────────────────────
+          StatefulShellBranch(
+            navigatorKey: _hrDashKey,
             routes: [
               GoRoute(
-                path:               'create',
-                parentNavigatorKey: _rootKey,
-                builder:            (_, __) => const CreateJobScreen(),
+                path:    '/hr/dashboard',
+                builder: (_, __) => const dash.HRDashboardScreen(),
               ),
-            ],
-          ),
-          GoRoute(
-            path:    '/hr/candidates',
-            builder: (_, __) => const CandidatesScreen(),
-            routes: [
               GoRoute(
-                path:               ':id',
-                parentNavigatorKey: _rootKey,
-                builder: (_, state) =>
-                    CandidateDetailScreen(
+                path:    '/hr/jobs',
+                builder: (_, __) => const JobsScreen(),
+                routes: [
+                  GoRoute(
+                    path:               'create',
+                    parentNavigatorKey: _rootKey,
+                    builder:            (_, __) => const CreateJobScreen(),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path:    '/hr/candidates',
+                builder: (_, __) => const CandidatesScreen(),
+                routes: [
+                  GoRoute(
+                    path:               ':id',
+                    parentNavigatorKey: _rootKey,
+                    builder: (_, state) => CandidateDetailScreen(
                         candidateId: state.pathParameters['id']!),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path:    '/hr/interviews',
+                builder: (_, __) => const InterviewsScreen(),
               ),
             ],
           ),
-          GoRoute(
-            path:    '/hr/interviews',
-            builder: (_, __) => const InterviewsScreen(),
+
+          // ── Branch 1: History ─────────────────────────────────────────────
+          StatefulShellBranch(
+            navigatorKey: _hrHistKey,
+            routes: [
+              GoRoute(
+                path:    '/hr/history',
+                builder: (_, __) => const HistoryListScreen(),
+              ),
+            ],
+          ),
+
+          // ── Branch 2: Knowledge ───────────────────────────────────────────
+          StatefulShellBranch(
+            navigatorKey: _hrKnowKey,
+            routes: [
+              GoRoute(
+                path:    '/hr/knowledge',
+                builder: (_, __) => const KnowledgeScreen(),
+              ),
+            ],
+          ),
+
+          // ── Branch 3: Profile + Settings ──────────────────────────────────
+          StatefulShellBranch(
+            navigatorKey: _hrProfKey,
+            routes: [
+              GoRoute(
+                path:    '/hr/profile',
+                builder: (_, __) => const HRProfileScreen(),
+              ),
+              GoRoute(
+                path:    '/hr/settings',
+                builder: (_, __) => const SettingsScreen(),
+              ),
+            ],
           ),
         ],
       ),

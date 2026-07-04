@@ -4,6 +4,9 @@
 *.pyc
 *.swp
 .DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
 .atom/
 .build/
 .buildlog/
@@ -12,21 +15,35 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# IntelliJ / Android Studio (local workspace)
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# VS Code / Cursor — share launch/tasks, ignore machine-specific settings
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# AI / editor local folders
+.claude/
+.cursor/
+
+# Secrets & environment (never commit)
+.env
+.env.*
+!.env.example
+**/key.properties
+**/*.keystore
+**/*.jks
 
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
@@ -43,3 +60,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android local SDK path (per developer machine)
+**/local.properties
+
+# FVM (Flutter Version Management)
+.fvm/
