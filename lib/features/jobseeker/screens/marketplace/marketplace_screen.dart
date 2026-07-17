@@ -8,7 +8,6 @@ import '../../../../core/i18n/app_localizations.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_gradient_button.dart';
-import '../../data/jobseeker_mock.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
@@ -53,81 +52,136 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     final l10n = context.l10n;
     final filter = ref.watch(marketplaceFilterProvider);
     final filteredSets = ref.watch(filteredSetsProvider);
-    final notifier = ref.read(marketplaceFilterProvider.notifier);
+    final apiState = ref.watch(marketplaceApiProvider);
+    final filterNotifier = ref.read(marketplaceFilterProvider.notifier);
+
+    // Trigger server-side refetch whenever filter changes.
+    // Pill filters (difficulty/category) fire immediately; search is debounced.
+    ref.listen<MarketplaceFilterState>(marketplaceFilterProvider,
+        (prev, next) {
+      if (prev == next) return;
+      final isSearch = prev?.searchQuery != next.searchQuery;
+      ref
+          .read(marketplaceApiProvider.notifier)
+          .scheduleRefresh(immediate: !isSearch);
+    });
+
+    Widget resultsHeader;
+    if (apiState.isLoading) {
+      resultsHeader = Text(
+        'Đang tải...',
+        style: AppTextStyles.labelBold.copyWith(
+          color: isDark
+              ? AppColors.white.withValues(alpha: 0.45)
+              : AppColors.gray400,
+          fontSize: 13,
+        ),
+      );
+    } else if (apiState.error != null) {
+      resultsHeader = const SizedBox.shrink();
+    } else {
+      resultsHeader = Text(
+        filteredSets.isEmpty
+            ? l10n.noSetsFound
+            : l10n.setsFound(filteredSets.length),
+        style: AppTextStyles.labelBold.copyWith(
+          color: isDark ? AppColors.white : AppColors.nearBlack,
+          fontSize: 13,
+        ),
+      );
+    }
+
+    Widget gridSliver;
+    if (apiState.isLoading) {
+      gridSliver = _SkeletonGrid(isDark: isDark);
+    } else if (apiState.error != null) {
+      gridSliver = SliverFillRemaining(
+        hasScrollBody: false,
+        child: _ErrorState(
+          isDark: isDark,
+          message: apiState.error!,
+          onRetry: () => ref.read(marketplaceApiProvider.notifier).refresh(),
+        ),
+      );
+    } else if (filteredSets.isEmpty) {
+      gridSliver = SliverFillRemaining(
+        hasScrollBody: false,
+        child: _EmptyState(isDark: isDark),
+      );
+    } else {
+      gridSliver = _SetsGrid(sets: filteredSets, isDark: isDark);
+    }
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF070A13) : const Color(0xFFF8FAFC),
-      body: CustomScrollView(
-        slivers: [
-          // ── Hero section ───────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _HeroSection(isDark: isDark, l10n: l10n)
-                .animate()
-                .fadeIn(duration: 500.ms),
-          ),
+      body: RefreshIndicator(
+        color: AppColors.brandPurple,
+        onRefresh: () => ref.read(marketplaceApiProvider.notifier).refresh(),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // ── Hero section ─────────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: _HeroSection(isDark: isDark, l10n: l10n)
+                  .animate()
+                  .fadeIn(duration: 500.ms),
+            ),
 
-          // ── Search bar ─────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: _SearchBar(
-                controller: _searchCtrl,
-                isDark: isDark,
-                hint: l10n.searchSetsHint,
-                onChanged: notifier.setSearch,
-              ),
-            ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1, end: 0),
-          ),
-
-          // ── Category pills ─────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 14, 0, 0),
-              child: _CategoryPills(
-                categories: _categories,
-                selected: filter.categoryFilter,
-                isDark: isDark,
-                onSelect: notifier.setCategory,
-                l10n: l10n,
-              ),
-            ).animate().fadeIn(delay: 200.ms),
-          ),
-
-          // ── Difficulty pills ───────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-              child: _DifficultyPills(
-                difficulties: _difficulties,
-                selected: filter.difficultyFilter,
-                isDark: isDark,
-                onSelect: notifier.setDifficulty,
-              ),
-            ).animate().fadeIn(delay: 230.ms),
-          ),
-
-          // ── Results header ─────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-              child: Text(
-                filteredSets.isEmpty
-                    ? l10n.noSetsFound
-                    : l10n.setsFound(filteredSets.length),
-                style: AppTextStyles.labelBold.copyWith(
-                  color: isDark ? AppColors.white : AppColors.nearBlack,
-                  fontSize: 13,
+            // ── Search bar ───────────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                child: _SearchBar(
+                  controller: _searchCtrl,
+                  isDark: isDark,
+                  hint: l10n.searchSetsHint,
+                  onChanged: filterNotifier.setSearch,
                 ),
-              ),
-            ).animate().fadeIn(delay: 260.ms),
-          ),
+              ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1, end: 0),
+            ),
 
-          // ── Cards grid ────────────────────────────────────────────────────
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-            sliver: _SetsGrid(sets: filteredSets, isDark: isDark),
-          ),
-        ],
+            // ── Category pills ───────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 14, 0, 0),
+                child: _CategoryPills(
+                  categories: _categories,
+                  selected: filter.categoryFilter,
+                  isDark: isDark,
+                  onSelect: filterNotifier.setCategory,
+                  l10n: l10n,
+                ),
+              ).animate().fadeIn(delay: 200.ms),
+            ),
+
+            // ── Difficulty pills ─────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                child: _DifficultyPills(
+                  difficulties: _difficulties,
+                  selected: filter.difficultyFilter,
+                  isDark: isDark,
+                  onSelect: filterNotifier.setDifficulty,
+                ),
+              ).animate().fadeIn(delay: 230.ms),
+            ),
+
+            // ── Results header ───────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                child: resultsHeader,
+              ).animate().fadeIn(delay: 260.ms),
+            ),
+
+            // ── Cards grid / skeleton / empty / error ────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+              sliver: gridSliver,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -562,6 +616,241 @@ class _DifficultyPills extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Skeleton loading grid
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SkeletonGrid extends StatelessWidget {
+  final bool isDark;
+  const _SkeletonGrid({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (_, i) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _SkeletonCard(isDark: isDark),
+        ),
+        childCount: 4,
+      ),
+    );
+  }
+}
+
+class _SkeletonCard extends StatefulWidget {
+  final bool isDark;
+  const _SkeletonCard({required this.isDark});
+
+  @override
+  State<_SkeletonCard> createState() => _SkeletonCardState();
+}
+
+class _SkeletonCardState extends State<_SkeletonCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) {
+        final base = isDark ? const Color(0xFF1A1F35) : const Color(0xFFE5E7EB);
+        final highlight = isDark ? const Color(0xFF252B47) : const Color(0xFFF3F4F6);
+        final shimmer = Color.lerp(base, highlight, _anim.value)!;
+        return Container(
+          height: 180,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+            ),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Container(width: 40, height: 40,
+                    decoration: BoxDecoration(color: shimmer,
+                        borderRadius: BorderRadius.circular(10))),
+                const SizedBox(width: 10),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(height: 13, width: double.infinity,
+                        decoration: BoxDecoration(color: shimmer,
+                            borderRadius: BorderRadius.circular(6))),
+                    const SizedBox(height: 6),
+                    Container(height: 10, width: 120,
+                        decoration: BoxDecoration(color: shimmer,
+                            borderRadius: BorderRadius.circular(6))),
+                  ],
+                )),
+                const SizedBox(width: 8),
+                Container(width: 50, height: 22,
+                    decoration: BoxDecoration(color: shimmer,
+                        borderRadius: BorderRadius.circular(100))),
+              ]),
+              const SizedBox(height: 14),
+              Container(height: 10, width: double.infinity,
+                  decoration: BoxDecoration(color: shimmer,
+                      borderRadius: BorderRadius.circular(6))),
+              const SizedBox(height: 6),
+              Container(height: 10, width: 200,
+                  decoration: BoxDecoration(color: shimmer,
+                      borderRadius: BorderRadius.circular(6))),
+              const SizedBox(height: 14),
+              Row(children: [
+                Container(width: 60, height: 22,
+                    decoration: BoxDecoration(color: shimmer,
+                        borderRadius: BorderRadius.circular(6))),
+                const SizedBox(width: 8),
+                Container(width: 60, height: 22,
+                    decoration: BoxDecoration(color: shimmer,
+                        borderRadius: BorderRadius.circular(6))),
+              ]),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Empty state
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final bool isDark;
+  const _EmptyState({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              PhosphorIconsRegular.magnifyingGlass,
+              size: 52,
+              color: isDark
+                  ? AppColors.white.withValues(alpha: 0.25)
+                  : AppColors.gray400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Không tìm thấy bộ câu hỏi',
+              style: AppTextStyles.labelBold.copyWith(
+                fontSize: 16,
+                color: isDark ? AppColors.white : AppColors.nearBlack,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.caption.copyWith(
+                color: isDark
+                    ? AppColors.white.withValues(alpha: 0.45)
+                    : AppColors.gray400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Error state
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ErrorState extends StatelessWidget {
+  final bool isDark;
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorState({
+    required this.isDark,
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              PhosphorIconsRegular.wifiX,
+              size: 52,
+              color: const Color(0xFFEF4444).withValues(alpha: 0.70),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Không thể tải dữ liệu',
+              style: AppTextStyles.labelBold.copyWith(
+                fontSize: 16,
+                color: isDark ? AppColors.white : AppColors.nearBlack,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.caption.copyWith(
+                color: isDark
+                    ? AppColors.white.withValues(alpha: 0.45)
+                    : AppColors.gray400,
+              ),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(PhosphorIconsRegular.arrowCounterClockwise,
+                  size: 15),
+              label: const Text('Thử lại'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.brandPurple,
+                side: const BorderSide(color: AppColors.brandPurple),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Responsive grid
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -651,7 +940,9 @@ class _QuestionSetCardState extends State<QuestionSetCard> {
     final displaySkills = s.skills.take(4).toList();
     final overflowCount = s.skills.length > 4 ? s.skills.length - 4 : 0;
 
-    return MouseRegion(
+    return GestureDetector(
+      onTap: () => context.go('/jobseeker/sets/${s.id}'),
+      child: MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
@@ -691,24 +982,24 @@ class _QuestionSetCardState extends State<QuestionSetCard> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Company avatar
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: s.companyColor,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Text(
-                        s.companyInitials,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                  // Company avatar — logo image if available, else initials
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: s.companyLogo != null
+                        ? Image.network(
+                            s.companyLogo!,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _CompanyInitialsAvatar(
+                              initials: s.companyInitials,
+                              color: s.companyColor,
+                            ),
+                          )
+                        : _CompanyInitialsAvatar(
+                            initials: s.companyInitials,
+                            color: s.companyColor,
+                          ),
                   ),
                   const SizedBox(width: 10),
 
@@ -796,8 +1087,6 @@ class _QuestionSetCardState extends State<QuestionSetCard> {
                 _RatingRow(rating: s.rating!, isDark: isDark),
               ],
 
-              const Spacer(),
-
               // ── CTA button ──────────────────────────────────────────────
               const SizedBox(height: 12),
               AppGradientButton(
@@ -806,6 +1095,36 @@ class _QuestionSetCardState extends State<QuestionSetCard> {
                 onTap: () => context.go('/jobseeker/sets/${s.id}'),
               ),
             ],
+          ),
+        ),
+      ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Company initials avatar (fallback when no logo URL)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CompanyInitialsAvatar extends StatelessWidget {
+  final String initials;
+  final Color color;
+  const _CompanyInitialsAvatar({required this.initials, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      color: color,
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -964,17 +1283,15 @@ class _RatingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filled = rating.round().clamp(0, 5);
+    final full = rating.floor().clamp(0, 5);
+    final hasHalf = (rating - full) >= 0.3;
+    final empty = (5 - full - (hasHalf ? 1 : 0)).clamp(0, 5);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ...List.generate(5, (i) {
-          return Icon(
-            i < filled ? PhosphorIconsBold.star : PhosphorIconsRegular.star,
-            size: 14,
-            color: const Color(0xFFF59E0B),
-          );
-        }),
+        ...List.generate(full, (_) => const Icon(PhosphorIconsBold.star, size: 14, color: Color(0xFFF59E0B))),
+        if (hasHalf) const Icon(PhosphorIconsBold.starHalf, size: 14, color: Color(0xFFF59E0B)),
+        ...List.generate(empty, (_) => const Icon(PhosphorIconsRegular.star, size: 14, color: Color(0xFFF59E0B))),
         const SizedBox(width: 5),
         Text(
           rating.toStringAsFixed(1),

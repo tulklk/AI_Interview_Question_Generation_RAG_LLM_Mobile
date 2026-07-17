@@ -5,6 +5,7 @@ import '../../../../core/i18n/app_localizations.dart';
 import '../gen_colors.dart';
 import '../providers/generation_provider.dart';
 
+
 class Step1JdInputView extends ConsumerStatefulWidget {
   const Step1JdInputView({super.key});
 
@@ -67,8 +68,45 @@ class _Step1JdInputViewState extends ConsumerState<Step1JdInputView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FieldLabel(icon: PhosphorIconsBold.fileText,
-                    label: context.l10n.jobDescription, c: c),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _FieldLabel(icon: PhosphorIconsBold.fileText,
+                          label: context.l10n.jobDescription, c: c),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        final sample = context.l10n.sampleJd;
+                        _jdCtrl.text = sample;
+                        _jdCtrl.selection = TextSelection.collapsed(
+                            offset: sample.length);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: GenColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: GenColors.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.article_outlined,
+                                size: 12, color: GenColors.primary),
+                            const SizedBox(width: 4),
+                            Text(context.l10n.useSample,
+                                style: TextStyle(
+                                    color:      GenColors.primary,
+                                    fontSize:   11,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 _JdTextArea(
                   controller: _jdCtrl,

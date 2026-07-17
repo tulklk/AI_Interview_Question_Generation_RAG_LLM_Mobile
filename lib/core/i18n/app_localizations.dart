@@ -122,6 +122,38 @@ class AppLocalizations {
   String get aiNoteHint      => isVi
       ? 'VD: Tập trung vào System Design, phỏng vấn bằng tiếng Anh, ưu tiên câu hỏi thực tế...'
       : 'E.g.: Focus on System Design, English interview, prioritize practical questions...';
+  String get useSample       => isVi ? 'Dùng mẫu' : 'Use sample';
+  String get sampleJd        => isVi
+      ? 'Chúng tôi đang tìm kiếm một Fullstack Developer có 1–3 năm kinh nghiệm để phát triển ứng dụng web hoàn chỉnh từ frontend đến backend.\n\n'
+        'Trách nhiệm:\n'
+        '- Xây dựng RESTful API bằng ASP.NET Core hoặc Node.js.\n'
+        '- Phát triển giao diện người dùng bằng React.js hoặc Next.js.\n'
+        '- Thiết kế và làm việc với cơ sở dữ liệu PostgreSQL, SQL Server hoặc MySQL.\n'
+        '- Tích hợp xác thực người dùng, phân quyền và bảo mật hệ thống.\n'
+        '- Phối hợp với QA, UI/UX Designer và Product Team để phát triển tính năng.\n'
+        '- Debug lỗi trên cả frontend, backend và database.\n\n'
+        'Yêu cầu:\n'
+        '- Có kinh nghiệm với C#, ASP.NET Core hoặc Node.js.\n'
+        '- Thành thạo React.js, TypeScript, HTML, CSS.\n'
+        '- Hiểu REST API, JWT, database design, DTO, service layer.\n'
+        '- Biết sử dụng Git, Swagger, Postman, Docker là lợi thế.\n'
+        '- Có tư duy hệ thống và khả năng xử lý lỗi thực tế.\n\n'
+        'Ứng viên cần có khả năng giải thích kiến trúc fullstack, luồng frontend-backend, bảo mật API, tối ưu database và xử lý lỗi production.'
+      : 'We are looking for a Fullstack Developer with 1–3 years of experience to build complete web applications from frontend to backend.\n\n'
+        'Responsibilities:\n'
+        '- Build RESTful APIs using ASP.NET Core or Node.js.\n'
+        '- Develop user interfaces with React.js or Next.js.\n'
+        '- Design and work with PostgreSQL, SQL Server, or MySQL databases.\n'
+        '- Integrate user authentication, authorization, and system security.\n'
+        '- Collaborate with QA, UI/UX Designers, and the Product Team to deliver features.\n'
+        '- Debug issues across frontend, backend, and database layers.\n\n'
+        'Requirements:\n'
+        '- Experience with C#, ASP.NET Core, or Node.js.\n'
+        '- Proficient in React.js, TypeScript, HTML, and CSS.\n'
+        '- Understanding of REST API, JWT, database design, DTOs, and service layers.\n'
+        '- Familiarity with Git, Swagger, Postman, and Docker is a plus.\n'
+        '- Strong systems thinking and ability to handle real-world production issues.\n\n'
+        'Candidates must be able to explain fullstack architecture, frontend-backend data flow, API security, database optimization, and production error handling.';
   String get sufficient      => isVi ? 'Đủ độ dài'  : 'Sufficient';
   String get createPlanBtn   => isVi ? 'Tạo Plan'   : 'Create Plan';
   String get minCharsError   => isVi
@@ -305,8 +337,8 @@ class AppLocalizations {
   String get previous          => isVi ? 'Trước'              : 'Previous';
   String get exitPractice      => isVi ? 'Thoát luyện tập?'  : 'Exit practice?';
   String get exitPracticeBody  =>
-      isVi ? 'Tiến độ trong phiên này sẽ bị mất nếu bạn thoát.'
-           : 'Your progress in this session will be lost if you exit.';
+      isVi ? 'Câu đã gửi được lưu lại. Bạn có thể quay lại tiếp tục bất cứ lúc nào.'
+           : 'Submitted answers are saved. You can return to continue anytime.';
   String get exit              => isVi ? 'Thoát'              : 'Exit';
   String get stay              => isVi ? 'Ở lại'              : 'Stay';
   String charsCount(int n)     => isVi ? '$n ký tự' : '$n characters';
@@ -409,6 +441,26 @@ class AppLocalizations {
   String get downloadData      => isVi ? 'Tải xuống dữ liệu của tôi' : 'Download my data';
   String get deleteHistory     => isVi ? 'Xóa lịch sử luyện tập' : 'Delete practice history';
   String get deleteAccount     => isVi ? 'Xóa tài khoản'     : 'Delete account';
+
+  // ── CV / Resume ──────────────────────────────────────────────────────────
+  String get cvResume        => isVi ? 'CV / Hồ sơ'               : 'CV / Resume';
+  String get uploadCv        => isVi ? 'Tải lên CV'               : 'Upload CV';
+  String get replaceCv       => isVi ? 'Thay thế CV'              : 'Replace CV';
+  String get deleteCv        => isVi ? 'Xóa CV'                   : 'Delete CV';
+  String get deleteCvTitle   => isVi ? 'Xóa CV?'                  : 'Delete CV?';
+  String get deleteCvBody    => isVi ? 'CV của bạn sẽ bị xóa vĩnh viễn. Không thể hoàn tác.' : 'Your CV will be permanently deleted. This cannot be undone.';
+  String get noCvYet         => isVi ? 'Chưa có CV'               : 'No CV uploaded yet';
+  String get noCvHint        => isVi ? 'Tải lên CV để AI tự động trích xuất kỹ năng và tóm tắt kinh nghiệm.' : 'Upload your CV for AI to automatically extract skills and summarize your experience.';
+  String get cvUploading     => isVi ? 'Đang tải lên & phân tích AI...' : 'Uploading & analyzing with AI...';
+  String get cvUploadSuccess => isVi ? 'CV đã được tải lên thành công.' : 'CV uploaded successfully.';
+  String get cvDeleteSuccess => isVi ? 'CV đã được xóa.'          : 'CV deleted successfully.';
+  String get cvSkillsLabel   => isVi ? 'Kỹ năng trích xuất từ CV' : 'Skills extracted from CV';
+  String get cvSummaryLabel  => isVi ? 'Tóm tắt AI'               : 'AI Summary';
+  String get cvParsedAt      => isVi ? 'Phân tích lúc'            : 'Parsed at';
+  String get cvFormatError   => isVi ? 'Định dạng không hợp lệ. Chỉ chấp nhận PDF, DOCX, JPG, JPEG, PNG.' : 'Invalid format. Only PDF, DOCX, JPG, JPEG, PNG accepted.';
+  String get cvSizeError     => isVi ? 'File quá lớn (tối đa 10MB).' : 'File too large (max 10MB).';
+  String get acceptedFormats => isVi ? 'PDF, DOCX, JPG, JPEG, PNG · Tối đa 10MB' : 'PDF, DOCX, JPG, JPEG, PNG · Max 10MB';
+  String get chooseFile      => isVi ? 'Chọn file'                : 'Choose file';
 
   // ── Common ───────────────────────────────────────────────────────────────
   String get loading      => isVi ? 'Đang tải...'      : 'Loading...';

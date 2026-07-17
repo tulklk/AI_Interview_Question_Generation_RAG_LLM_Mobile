@@ -203,16 +203,65 @@ class AuthService {
   static Future<void> registerCandidate({
     required String email,
     required String password,
+    required String confirmPassword,
     required String fullName,
+    String? targetRole,
+    String? seniorityLevel,
+    List<String> techStack = const [],
   }) async {
     try {
       await _dio.post('/api/auth/register/candidate', data: {
-        'email':    email,
-        'password': password,
-        'fullName': fullName,
+        'email':           email,
+        'password':        password,
+        'confirmPassword': confirmPassword,
+        'fullName':        fullName,
+        if (targetRole != null && targetRole.isNotEmpty) 'targetRole': targetRole,
+        if (seniorityLevel != null && seniorityLevel.isNotEmpty)
+          'seniorityLevel': seniorityLevel,
+        if (techStack.isNotEmpty) 'techStack': techStack,
       });
     } on DioException catch (e) {
       throw _mapRegisterError(e);
+    }
+  }
+
+  // ── Verify email with OTP ────────────────────────────────────────────────────
+
+  static Future<void> verifyEmail({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      await _dio.post('/api/auth/verify-email', data: {
+        'email': email,
+        'otp': otp,
+      });
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.sendTimeout) {
+        throw const AuthException(
+          message: 'Không thể kết nối. Vui lòng kiểm tra kết nối mạng.',
+          type: AuthErrorType.networkError,
+        );
+      }
+      final body = e.response?.data;
+      String msg = '';
+      if (body is Map) {
+        final errors = body['errors'];
+        if (errors is List && errors.isNotEmpty) {
+          msg = errors.map((v) => v.toString()).join(' ');
+        } else {
+          msg = (body['message'] ?? '').toString();
+        }
+      }
+      throw AuthException(
+        message: msg.isNotEmpty
+            ? msg
+            : 'Mã xác minh không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.',
+        type: AuthErrorType.serverError,
+      );
     }
   }
 

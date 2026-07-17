@@ -54,6 +54,7 @@ class _QuestionReviewViewState
                         child:   QuestionCard(
                           question:    q,
                           index:       i + 1,
+                          jobId:       state.jobId,
                           canMoveUp:   i > 0,
                           canMoveDown: i < questions.length - 1,
                           onUpdated:   (updated) =>

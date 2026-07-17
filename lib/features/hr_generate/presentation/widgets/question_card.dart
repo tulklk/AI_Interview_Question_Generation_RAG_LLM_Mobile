@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../ask_ai/widgets/ask_ai_panel.dart';
 import '../../domain/enums/difficulty_level.dart';
 import '../../domain/enums/question_type.dart';
 import '../../domain/models/generated_question.dart';
@@ -11,6 +12,7 @@ class QuestionCard extends StatefulWidget {
   final int index;
   final bool canMoveUp;
   final bool canMoveDown;
+  final String? jobId;
   final ValueChanged<GeneratedQuestion> onUpdated;
   final VoidCallback onDelete;
   final VoidCallback onMoveUp;
@@ -22,6 +24,7 @@ class QuestionCard extends StatefulWidget {
     required this.index,
     required this.canMoveUp,
     required this.canMoveDown,
+    this.jobId,
     required this.onUpdated,
     required this.onDelete,
     required this.onMoveUp,
@@ -65,7 +68,20 @@ class _QuestionCardState extends State<QuestionCard> {
     super.dispose();
   }
 
-  Color get _diffColor => widget.question.difficulty.badgeColor;
+  void _applyAiSuggestion(QuestionSuggestion s) {
+    widget.onUpdated(widget.question.copyWith(
+      question:     s.question,
+      questionType: s.questionType != null
+          ? HrQuestionType.fromString(s.questionType!)
+          : null,
+      difficulty: s.difficulty != null
+          ? HrDifficultyLevel.fromString(s.difficulty!)
+          : null,
+      rationale:    s.rationale,
+      sampleAnswer: s.sampleAnswer,
+      isEdited:     true,
+    ));
+  }
 
   void _startEdit() {
     _resetEdits();
@@ -132,8 +148,9 @@ class _QuestionCardState extends State<QuestionCard> {
             ],
           ),
         ),
+        // ── Badges + action icons row ───────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 10, 10),
+          padding: const EdgeInsets.fromLTRB(14, 0, 10, 8),
           child: Row(
             children: [
               _TypeBadge(type: widget.question.questionType),
@@ -190,6 +207,47 @@ class _QuestionCardState extends State<QuestionCard> {
             ],
           ),
         ),
+
+        // ── Ask AI pill ─────────────────────────────────────────────────
+        if (widget.jobId != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: GestureDetector(
+              onTap: () => showAskAiSheet(
+                context,
+                question:          widget.question,
+                jobId:             widget.jobId!,
+                onApplySuggestion: _applyAiSuggestion,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF7C3AED), Color(0xFF9F67FA)],
+                    begin:  Alignment.topLeft,
+                    end:    Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_awesome_rounded,
+                        size: 13, color: Colors.white),
+                    SizedBox(width: 5),
+                    Text('AI Hỏi đáp',
+                        style: TextStyle(
+                            color:      Colors.white,
+                            fontSize:   12,
+                            fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          const SizedBox(height: 10),
+
         AnimatedCrossFade(
           firstChild:     const SizedBox.shrink(),
           secondChild:    _ExpandedDetail(q: widget.question),

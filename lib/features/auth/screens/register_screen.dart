@@ -62,6 +62,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   // Step 2 — errors
   String? _fullNameError;
   String? _companyError;
+  String? _targetRoleError;
 
   late AnimationController _stepAnim;
 
@@ -105,8 +106,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   }
 
   void _clearStep2Errors() {
-    _fullNameError = null;
-    _companyError  = null;
+    _fullNameError    = null;
+    _companyError     = null;
+    _targetRoleError  = null;
   }
 
   // ── Validation ──────────────────────────────────────────────────────────
@@ -154,8 +156,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
         _companyError = _companyCtrl.text.trim().isEmpty
             ? 'Vui lòng nhập tên công ty'
             : null;
+      } else {
+        _targetRoleError = _targetRoleCtrl.text.trim().isEmpty
+            ? 'Vui lòng nhập vị trí mục tiêu'
+            : null;
       }
-      if (_fullNameError != null || _companyError != null) ok = false;
+      if (_fullNameError != null ||
+          _companyError != null ||
+          _targetRoleError != null) {
+        ok = false;
+      }
     });
     return ok;
   }
@@ -184,9 +194,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
         );
       } else {
         await AuthService.registerCandidate(
-          email:    _emailCtrl.text.trim(),
-          password: _passCtrl.text,
-          fullName: _fullNameCtrl.text.trim(),
+          email:           _emailCtrl.text.trim(),
+          password:        _passCtrl.text,
+          confirmPassword: _confirmCtrl.text,
+          fullName:        _fullNameCtrl.text.trim(),
+          targetRole:      _targetRoleCtrl.text.trim(),
+          seniorityLevel:  _seniority,
+          techStack:       _techStack.toList(),
         );
       }
       if (!mounted) return;
@@ -413,12 +427,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                               )
                             : _CandidateStep2Form(
                                 key: const ValueKey('step2cand'),
-                                fullNameCtrl:   _fullNameCtrl,
-                                targetRoleCtrl: _targetRoleCtrl,
-                                seniority:      _seniority,
-                                techStack:      _techStack,
-                                isDark:         isDark,
-                                fullNameError:  _fullNameError,
+                                fullNameCtrl:    _fullNameCtrl,
+                                targetRoleCtrl:  _targetRoleCtrl,
+                                seniority:       _seniority,
+                                techStack:       _techStack,
+                                isDark:          isDark,
+                                fullNameError:   _fullNameError,
+                                targetRoleError: _targetRoleError,
                                 onSeniorityChanged: (v) =>
                                     setState(() => _seniority = v),
                                 onTechToggled: (t) => setState(() =>
@@ -1259,10 +1274,22 @@ class _CompanyDropdown extends StatelessWidget {
 // ─── Step 2: Candidate profile ────────────────────────────────────────────────
 
 const _seniorityLevels = ['Intern', 'Fresher', 'Junior', 'Middle', 'Senior', 'Lead'];
-const _techOptions = [
+
+// Tech options grouped by category for the bottom sheet
+const _techCategories = <String, List<String>>{
+  'Frontend':       ['JavaScript', 'TypeScript', 'React', 'Next.js', 'Vue', 'Angular'],
+  'Backend':        ['Node.js', 'Python', 'Java', 'PHP', 'Go', 'C#'],
+  'Mobile':         ['Flutter', 'Dart', 'Kotlin', 'Swift'],
+  'DevOps / Cloud': ['Docker', 'Kubernetes', 'AWS', 'Azure'],
+  'Database':       ['MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'GraphQL'],
+};
+
+// Flat list used for diff computation
+const _allTechOptions = [
   'JavaScript', 'TypeScript', 'React', 'Next.js', 'Vue', 'Angular',
-  'Node.js', 'Python', 'Java', 'Kotlin', 'Swift', 'Go', 'C#', 'PHP',
-  'Flutter', 'Dart', 'Docker', 'Kubernetes', 'AWS', 'Azure',
+  'Node.js', 'Python', 'Java', 'PHP', 'Go', 'C#',
+  'Flutter', 'Dart', 'Kotlin', 'Swift',
+  'Docker', 'Kubernetes', 'AWS', 'Azure',
   'MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'GraphQL',
 ];
 
@@ -1272,6 +1299,7 @@ class _CandidateStep2Form extends StatelessWidget {
   final Set<String> techStack;
   final bool isDark;
   final String? fullNameError;
+  final String? targetRoleError;
   final ValueChanged<String> onSeniorityChanged;
   final ValueChanged<String> onTechToggled;
 
@@ -1283,125 +1311,394 @@ class _CandidateStep2Form extends StatelessWidget {
     required this.techStack,
     required this.isDark,
     this.fullNameError,
+    this.targetRoleError,
     required this.onSeniorityChanged,
     required this.onTechToggled,
   });
 
+  static const _bg = {false: Color(0xFFF9FAFB), true: Color(0xFF1A2235)};
+  static const _bd = {false: Color(0xFFE5E7EB), true: Color(0xFF374151)};
+
+  void _openTechSheet(BuildContext context) {
+    final tempSelected = Set<String>.from(techStack);
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheetState) => _TechStackSheet(
+          isDark: isDark,
+          tempSelected: tempSelected,
+          onToggle: (t) => setSheetState(() {
+            if (tempSelected.contains(t)) {
+              tempSelected.remove(t);
+            } else {
+              tempSelected.add(t);
+            }
+          }),
+          onApply: () {
+            // Apply diff back to parent
+            for (final t in _allTechOptions) {
+              final was = techStack.contains(t);
+              final now = tempSelected.contains(t);
+              if (was != now) onTechToggled(t);
+            }
+            Navigator.of(ctx).pop();
+          },
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    final bg = _bg[isDark]!;
+    final bd = _bd[isDark]!;
+    final textColor = isDark ? Colors.white : AppColors.nearBlack;
+    final labelStyle = AppTextStyles.label.copyWith(
+      color: isDark ? Colors.white.withValues(alpha: 0.85) : AppColors.nearBlack,
+      fontWeight: FontWeight.w600,
+      fontSize: 13,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AuthInputField(
+          controller: fullNameCtrl,
+          label: 'Họ tên *',
+          hint: 'Nguyễn Văn B',
+          icon: PhosphorIconsBold.user,
+          error: fullNameError,
+        ),
+        const SizedBox(height: 14),
+        AuthInputField(
+          controller: targetRoleCtrl,
+          label: 'Vị trí mục tiêu *',
+          hint: 'Flutter Developer',
+          icon: PhosphorIconsBold.briefcase,
+          error: targetRoleError,
+        ),
+        const SizedBox(height: 14),
+
+        // ── Seniority dropdown ────────────────────────────────────────────────
+        Text('Cấp độ kinh nghiệm', style: labelStyle),
+        const SizedBox(height: 6),
+        Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: bd),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(children: [
+            const Icon(PhosphorIconsBold.medal, size: 17, color: AppColors.gray400),
+            const SizedBox(width: 10),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: seniority,
+                  isExpanded: true,
+                  iconSize: 0,
+                  style: AppTextStyles.body.copyWith(
+                    color: textColor,
+                    fontSize: 14,
+                  ),
+                  dropdownColor: isDark ? const Color(0xFF1A2235) : Colors.white,
+                  items: _seniorityLevels
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
+                  onChanged: (v) { if (v != null) onSeniorityChanged(v); },
+                ),
+              ),
+            ),
+            const Icon(PhosphorIconsBold.caretDown, size: 13, color: AppColors.gray400),
+          ]),
+        ),
+        const SizedBox(height: 14),
+
+        // ── Tech Stack multi-select ───────────────────────────────────────────
+        Text('Tech Stack', style: labelStyle),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: () => _openTechSheet(context),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: double.infinity,
+            constraints: const BoxConstraints(minHeight: 48),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: techStack.isNotEmpty
+                    ? AppColors.brandPurple.withValues(alpha: 0.6)
+                    : bd,
+                width: techStack.isNotEmpty ? 1.5 : 1.0,
+              ),
+            ),
+            padding: EdgeInsets.fromLTRB(
+              14,
+              techStack.isEmpty ? 0 : 10,
+              14,
+              techStack.isEmpty ? 0 : 10,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  PhosphorIconsBold.code,
+                  size: 17,
+                  color: techStack.isNotEmpty
+                      ? AppColors.brandPurple
+                      : AppColors.gray400,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: techStack.isEmpty
+                      ? SizedBox(
+                          height: 32,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Chọn kỹ năng...',
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.gray400,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Wrap(
+                          spacing: 5,
+                          runSpacing: 5,
+                          children: techStack
+                              .map((t) => _SelectedTechChip(
+                                    label: t,
+                                    onRemove: () => onTechToggled(t),
+                                  ))
+                              .toList(),
+                        ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  PhosphorIconsBold.caretDown,
+                  size: 13,
+                  color: techStack.isNotEmpty
+                      ? AppColors.brandPurple
+                      : AppColors.gray400,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Removable chip shown inside the tech stack trigger field ──────────────────
+
+class _SelectedTechChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onRemove;
+
+  const _SelectedTechChip({required this.label, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.only(left: 8, right: 4, top: 3, bottom: 3),
+        decoration: BoxDecoration(
+          color: AppColors.brandPurple.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.brandPurple.withValues(alpha: 0.35)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(label,
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.brandPurple,
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+              )),
+          const SizedBox(width: 3),
+          GestureDetector(
+            onTap: onRemove,
+            child: const Icon(PhosphorIconsBold.x, size: 11,
+                color: AppColors.brandPurple),
+          ),
+        ]),
+      );
+}
+
+// ── Tech Stack bottom sheet ───────────────────────────────────────────────────
+
+class _TechStackSheet extends StatelessWidget {
+  final bool isDark;
+  final Set<String> tempSelected;
+  final ValueChanged<String> onToggle;
+  final VoidCallback onApply;
+
+  const _TechStackSheet({
+    required this.isDark,
+    required this.tempSelected,
+    required this.onToggle,
+    required this.onApply,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isDark ? const Color(0xFF0F1729) : Colors.white;
+    final divider = isDark ? AppColors.darkCardBorder : AppColors.gray200;
+    final textColor = isDark ? Colors.white : AppColors.nearBlack;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AuthInputField(
-            controller: fullNameCtrl,
-            label: 'Họ tên *',
-            hint: 'Nguyễn Văn B',
-            icon: PhosphorIconsBold.user,
-            error: fullNameError,
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: divider,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-          const SizedBox(height: 14),
-          AuthInputField(
-            controller: targetRoleCtrl,
-            label: 'Vị trí mục tiêu',
-            hint: 'Flutter Developer',
-            icon: PhosphorIconsBold.briefcase,
-          ),
-          const SizedBox(height: 14),
-          Text('Cấp độ kinh nghiệm',
-              style: AppTextStyles.label.copyWith(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.85)
-                      : AppColors.nearBlack,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13)),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: _seniorityLevels.map((s) {
-              final selected = s == seniority;
-              return GestureDetector(
-                onTap: () => onSeniorityChanged(s),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+            child: Row(children: [
+              Text('Chọn Tech Stack',
+                  style: AppTextStyles.label.copyWith(
+                    color: textColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  )),
+              const Spacer(),
+              if (tempSelected.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: selected
-                        ? AppColors.brandPurple
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: selected
-                          ? AppColors.brandPurple
-                          : (isDark
-                              ? const Color(0xFF374151)
-                              : const Color(0xFFE5E7EB)),
-                    ),
+                    color: AppColors.brandPurple.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(s,
+                  child: Text('${tempSelected.length} đã chọn',
                       style: AppTextStyles.caption.copyWith(
-                          color: selected
-                              ? Colors.white
-                              : AppColors.gray500,
-                          fontWeight: selected
-                              ? FontWeight.w700
-                              : FontWeight.w400,
-                          fontSize: 12)),
+                        color: AppColors.brandPurple,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      )),
                 ),
-              );
-            }).toList(),
+            ]),
           ),
-          const SizedBox(height: 14),
-          Text('Tech Stack',
-              style: AppTextStyles.label.copyWith(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.85)
-                      : AppColors.nearBlack,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13)),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: _techOptions.map((t) {
-              final selected = techStack.contains(t);
-              return GestureDetector(
-                onTap: () => onTechToggled(t),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? AppColors.brandPurple.withValues(alpha: 0.15)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(
-                      color: selected
-                          ? AppColors.brandPurple
-                          : (isDark
-                              ? const Color(0xFF374151)
-                              : const Color(0xFFE5E7EB)),
-                      width: selected ? 1.5 : 1.0,
-                    ),
+          Divider(height: 1, color: divider),
+
+          // Scrollable tech list by category
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.only(bottom: 8),
+              children: _techCategories.entries.map((entry) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Row(children: [
+                      Container(
+                        width: 3,
+                        height: 13,
+                        decoration: BoxDecoration(
+                          color: AppColors.brandPurple,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(entry.key,
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.gray500,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          )),
+                    ]),
                   ),
-                  child: Text(t,
-                      style: AppTextStyles.caption.copyWith(
-                          color: selected
-                              ? AppColors.brandPurple
-                              : (isDark
-                                  ? Colors.white.withValues(alpha: 0.7)
-                                  : AppColors.gray500),
-                          fontWeight: selected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                          fontSize: 11)),
-                ),
-              );
-            }).toList(),
+                  ...entry.value.map((tech) {
+                    final selected = tempSelected.contains(tech);
+                    return InkWell(
+                      onTap: () => onToggle(tech),
+                      splashColor: AppColors.brandPurple.withValues(alpha: 0.06),
+                      highlightColor: AppColors.brandPurple.withValues(alpha: 0.04),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 11),
+                        child: Row(children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? AppColors.brandPurple
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: selected
+                                    ? AppColors.brandPurple
+                                    : (isDark
+                                        ? const Color(0xFF374151)
+                                        : const Color(0xFFD1D5DB)),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: selected
+                                ? const Icon(PhosphorIconsBold.check,
+                                    size: 12, color: Colors.white)
+                                : null,
+                          ),
+                          const SizedBox(width: 14),
+                          Text(tech,
+                              style: AppTextStyles.body.copyWith(
+                                color: selected
+                                    ? textColor
+                                    : AppColors.gray500,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                fontSize: 14,
+                              )),
+                        ]),
+                      ),
+                    );
+                  }),
+                ],
+              )).toList(),
+            ),
+          ),
+
+          // Apply button
+          Divider(height: 1, color: divider),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              16, 12, 16,
+              16 + MediaQuery.of(context).padding.bottom,
+            ),
+            child: ShimmerButton(
+              label: tempSelected.isEmpty
+                  ? 'Áp dụng'
+                  : 'Áp dụng (${tempSelected.length})',
+              onTap: onApply,
+            ),
           ),
         ],
-      );
+      ),
+    );
+  }
 }
 

@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,9 +40,11 @@ class _JobseekerProfileScreenState
     _linkedinCtrl = TextEditingController();
     _githubCtrl = TextEditingController();
     _skillInputCtrl = TextEditingController();
-    // Trigger profile load on first open
-    Future.microtask(
-        () => ref.read(candidateProfileProvider.notifier).load());
+    // Trigger profile + CV load on first open
+    Future.microtask(() {
+      ref.read(candidateProfileProvider.notifier).load();
+      ref.read(cvProvider.notifier).load();
+    });
   }
 
   @override
@@ -177,32 +180,37 @@ class _JobseekerProfileScreenState
                             ),
                             const SizedBox(width: 20),
                             Expanded(
-                              child: _ProfileForm(
-                                editing: _editing,
-                                data: profileState.profile ??
-                                    const CandidateProfileData(fullName: '', email: ''),
-                                isDark: isDark,
-                                l10n: l10n,
-                                nameCtrl: _nameCtrl,
-                                bioCtrl: _bioCtrl,
-                                targetRoleCtrl: _targetRoleCtrl,
-                                linkedinCtrl: _linkedinCtrl,
-                                githubCtrl: _githubCtrl,
-                                skillInputCtrl: _skillInputCtrl,
-                                seniorityLevel: _seniorityLevel,
-                                skills: _skills,
-                                onSeniorityChanged: (v) =>
-                                    setState(() => _seniorityLevel = v),
-                                onSkillAdd: (s) {
-                                  if (s.trim().isNotEmpty &&
-                                      !_skills.contains(s.trim())) {
-                                    setState(
-                                        () => _skills.add(s.trim()));
-                                    _skillInputCtrl.clear();
-                                  }
-                                },
-                                onSkillRemove: (s) =>
-                                    setState(() => _skills.remove(s)),
+                              child: Column(
+                                children: [
+                                  _ProfileForm(
+                                    editing: _editing,
+                                    data: profileState.profile ??
+                                        const CandidateProfileData(fullName: '', email: ''),
+                                    isDark: isDark,
+                                    l10n: l10n,
+                                    nameCtrl: _nameCtrl,
+                                    bioCtrl: _bioCtrl,
+                                    targetRoleCtrl: _targetRoleCtrl,
+                                    linkedinCtrl: _linkedinCtrl,
+                                    githubCtrl: _githubCtrl,
+                                    skillInputCtrl: _skillInputCtrl,
+                                    seniorityLevel: _seniorityLevel,
+                                    skills: _skills,
+                                    onSeniorityChanged: (v) =>
+                                        setState(() => _seniorityLevel = v),
+                                    onSkillAdd: (s) {
+                                      if (s.trim().isNotEmpty &&
+                                          !_skills.contains(s.trim())) {
+                                        setState(() => _skills.add(s.trim()));
+                                        _skillInputCtrl.clear();
+                                      }
+                                    },
+                                    onSkillRemove: (s) =>
+                                        setState(() => _skills.remove(s)),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _CvSection(isDark: isDark, l10n: l10n),
+                                ],
                               ),
                             ),
                           ],
@@ -243,6 +251,9 @@ class _JobseekerProfileScreenState
                               onSkillRemove: (s) =>
                                   setState(() => _skills.remove(s)),
                             ).animate().fadeIn(delay: 100.ms),
+                            const SizedBox(height: 14),
+                            _CvSection(isDark: isDark, l10n: l10n)
+                                .animate().fadeIn(delay: 120.ms),
                           ],
                         ),
                     ],
@@ -1115,6 +1126,555 @@ class _ErrorView extends StatelessWidget {
             child: const Text('Retry'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── CV Section ────────────────────────────────────────────────────────────────
+
+const _kAllowedExts = ['pdf', 'docx', 'jpg', 'jpeg', 'png'];
+const _kMaxSizeBytes = 10 * 1024 * 1024; // 10 MB
+
+class _CvSection extends ConsumerStatefulWidget {
+  final bool isDark;
+  final AppLocalizations l10n;
+
+  const _CvSection({required this.isDark, required this.l10n});
+
+  @override
+  ConsumerState<_CvSection> createState() => _CvSectionState();
+}
+
+class _CvSectionState extends ConsumerState<_CvSection> {
+  Future<void> _pickAndUpload({bool replace = false}) async {
+    // Client-side validate: format
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: _kAllowedExts,
+      withData: false,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.single;
+    final ext = (file.extension ?? '').toLowerCase();
+
+    if (!_kAllowedExts.contains(ext)) {
+      _toast(widget.l10n.cvFormatError, isError: true);
+      return;
+    }
+    if ((file.size) > _kMaxSizeBytes) {
+      _toast(widget.l10n.cvSizeError, isError: true);
+      return;
+    }
+
+    final path = file.path;
+    if (path == null) {
+      _toast('Không thể đọc file.', isError: true);
+      return;
+    }
+
+    final error = await ref
+        .read(cvProvider.notifier)
+        .upload(path, file.name);
+
+    if (!mounted) return;
+    if (error == null) {
+      _toast(widget.l10n.cvUploadSuccess);
+    } else {
+      _toast(error, isError: true);
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final l10n = widget.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor:
+            widget.isDark ? const Color(0xFF1A1F35) : Colors.white,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14)),
+        title: Text(
+          l10n.deleteCvTitle,
+          style: TextStyle(
+            color: widget.isDark ? Colors.white : const Color(0xFF111827),
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          l10n.deleteCvBody,
+          style: TextStyle(
+            color: widget.isDark
+                ? const Color(0xFF9CA3AF)
+                : const Color(0xFF6B7280),
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel,
+                style: const TextStyle(color: Color(0xFF6B7280))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              l10n.deleteCv,
+              style: const TextStyle(
+                  color: Color(0xFFEF4444), fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final ok = await ref.read(cvProvider.notifier).delete();
+    if (!mounted) return;
+    if (ok) {
+      _toast(widget.l10n.cvDeleteSuccess);
+    } else {
+      final err = ref.read(cvProvider).error;
+      _toast(err ?? 'Xóa CV thất bại.', isError: true);
+    }
+  }
+
+  void _toast(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor:
+            isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+      ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cvState = ref.watch(cvProvider);
+    final l10n = widget.l10n;
+    final isDark = widget.isDark;
+    final cardBg = isDark ? const Color(0xFF1A1F35) : Colors.white;
+    final borderC =
+        isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderC),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.description_rounded,
+                  size: 16, color: AppColors.brandPurple),
+              const SizedBox(width: 6),
+              Text(
+                l10n.cvResume,
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF111827),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ── Loading (initial fetch) ───────────────────────────────────────
+          if (cvState.isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: CircularProgressIndicator(
+                    color: AppColors.brandPurple, strokeWidth: 2),
+              ),
+            )
+
+          // ── Uploading / parsing AI ────────────────────────────────────────
+          else if (cvState.isUploading)
+            _UploadingIndicator(isDark: isDark, l10n: l10n)
+
+          // ── Has CV ────────────────────────────────────────────────────────
+          else if (cvState.hasCV)
+            _CvCard(
+              cv: cvState.cv!,
+              isDark: isDark,
+              l10n: l10n,
+              isDeleting: cvState.isDeleting,
+              onReplace: () => _pickAndUpload(replace: true),
+              onDelete: _confirmDelete,
+            )
+
+          // ── Empty state ───────────────────────────────────────────────────
+          else
+            _CvEmptyState(
+              isDark: isDark,
+              l10n: l10n,
+              onUpload: _pickAndUpload,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Uploading indicator ───────────────────────────────────────────────────────
+
+class _UploadingIndicator extends StatelessWidget {
+  final bool isDark;
+  final AppLocalizations l10n;
+  const _UploadingIndicator({required this.isDark, required this.l10n});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.brandPurple.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: AppColors.brandPurple.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                color: AppColors.brandPurple, strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              l10n.cvUploading,
+              style: TextStyle(
+                color: isDark
+                    ? const Color(0xFFD1D5DB)
+                    : const Color(0xFF374151),
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+class _CvEmptyState extends StatelessWidget {
+  final bool isDark;
+  final AppLocalizations l10n;
+  final VoidCallback onUpload;
+  const _CvEmptyState(
+      {required this.isDark, required this.l10n, required this.onUpload});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0D1117) : const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E2640) : const Color(0xFFE5E7EB),
+          style: BorderStyle.solid,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.upload_file_rounded,
+            size: 40,
+            color: isDark
+                ? const Color(0xFF4A5578)
+                : const Color(0xFF9CA3AF),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            l10n.noCvYet,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF111827),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            l10n.noCvHint,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isDark
+                  ? const Color(0xFF6B7280)
+                  : const Color(0xFF9CA3AF),
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            l10n.acceptedFormats,
+            style: const TextStyle(
+                color: Color(0xFF4A5578),
+                fontSize: 11),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: onUpload,
+            icon: const Icon(Icons.upload_rounded, size: 16),
+            label: Text(l10n.uploadCv),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandPurple,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Loaded CV card ────────────────────────────────────────────────────────────
+
+class _CvCard extends StatelessWidget {
+  final CvData cv;
+  final bool isDark;
+  final AppLocalizations l10n;
+  final bool isDeleting;
+  final VoidCallback onReplace;
+  final VoidCallback onDelete;
+
+  const _CvCard({
+    required this.cv,
+    required this.isDark,
+    required this.l10n,
+    required this.isDeleting,
+    required this.onReplace,
+    required this.onDelete,
+  });
+
+  String _formatDate(String? iso) {
+    if (iso == null) return '';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      return '${dt.day.toString().padLeft(2, '0')}/'
+          '${dt.month.toString().padLeft(2, '0')}/'
+          '${dt.year}  '
+          '${dt.hour.toString().padLeft(2, '0')}:'
+          '${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final labelColor =
+        isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
+    final textColor =
+        isDark ? const Color(0xFFD1D5DB) : const Color(0xFF374151);
+    final borderC =
+        isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+
+    final allSkills = [
+      ...cv.skills,
+      ...cv.techStack.where((s) => !cv.skills.contains(s))
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // File name row
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0D1117) : const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: borderC),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.picture_as_pdf_rounded,
+                  size: 20,
+                  color: isDark
+                      ? const Color(0xFFA78BFA)
+                      : AppColors.brandPurple),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cv.cvFileName ?? 'CV',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF111827),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (cv.parsedAt != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '${l10n.cvParsedAt}: ${_formatDate(cv.parsedAt)}',
+                        style: TextStyle(color: labelColor, fontSize: 11),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(Icons.check_circle_rounded,
+                  size: 18, color: Color(0xFF10B981)),
+            ],
+          ),
+        ),
+
+        // Skills extracted
+        if (allSkills.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(l10n.cvSkillsLabel,
+              style: TextStyle(
+                  color: labelColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 5,
+            children: allSkills
+                .map((s) => _SkillChip(label: s, isDark: isDark))
+                .toList(),
+          ),
+        ],
+
+        // AI Summary
+        if (cv.summary != null && cv.summary!.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(l10n.cvSummaryLabel,
+              style: TextStyle(
+                  color: labelColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3)),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.brandPurple.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                  color: AppColors.brandPurple.withValues(alpha: 0.2)),
+            ),
+            child: Text(
+              cv.summary!,
+              style: TextStyle(
+                  color: textColor, fontSize: 12, height: 1.6),
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 14),
+
+        // Action buttons
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onReplace,
+                icon: const Icon(Icons.swap_horiz_rounded, size: 15),
+                label: Text(l10n.replaceCv),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.brandPurple,
+                  side: const BorderSide(color: AppColors.brandPurple),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: isDeleting ? null : onDelete,
+                icon: isDeleting
+                    ? const SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(
+                            color: Color(0xFFEF4444), strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline_rounded, size: 15),
+                label: Text(l10n.deleteCv),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFEF4444),
+                  side: const BorderSide(color: Color(0xFFEF4444)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SkillChip extends StatelessWidget {
+  final String label;
+  final bool isDark;
+  const _SkillChip({required this.label, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.brandPurple
+            .withValues(alpha: isDark ? 0.15 : 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+            color: AppColors.brandPurple
+                .withValues(alpha: isDark ? 0.35 : 0.25)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: isDark
+              ? const Color(0xFFA78BFA)
+              : AppColors.brandPurple,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

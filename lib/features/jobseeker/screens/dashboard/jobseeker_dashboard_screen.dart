@@ -10,6 +10,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../data/providers/app_providers.dart';
 import '../../data/jobseeker_mock.dart';
 import '../../models/jobseeker_models.dart';
+import '../../providers/jobseeker_providers.dart';
 import '../marketplace/marketplace_screen.dart';
 
 class JobseekerDashboardScreen extends ConsumerWidget {
@@ -36,7 +37,11 @@ class JobseekerDashboardScreen extends ConsumerWidget {
             _WelcomeHeader(greeting: l10n.greetingFor(hour), name: name, l10n: l10n, isDark: isDark)
                 .animate().fadeIn(duration: 400.ms).slideY(begin: 0.06, end: 0),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            // ── In-Progress sessions ──────────────────────────────────────
+            _InProgressSection(isDark: isDark)
+                .animate().fadeIn(delay: 60.ms),
 
             // ── Stat cards (2×2 grid) ─────────────────────────────────────
             _StatCards(l10n: l10n, isDark: isDark)
@@ -497,23 +502,27 @@ class _SessionTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: session.companyColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Text(
-                  session.companyInitials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: session.companyLogo != null
+                  ? Image.network(
+                      session.companyLogo!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _CompanyAvatar(
+                        color: session.companyColor,
+                        initials: session.companyInitials,
+                        size: 40,
+                        fontSize: 14,
+                      ),
+                    )
+                  : _CompanyAvatar(
+                      color: session.companyColor,
+                      initials: session.companyInitials,
+                      size: 40,
+                      fontSize: 14,
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -834,6 +843,212 @@ class _RecommendedSets extends StatelessWidget {
                     .fadeIn(delay: (e.key * 80).ms),
               ))
           .toList(),
+    );
+  }
+}
+
+// ── In-Progress Section ───────────────────────────────────────────────────────
+
+class _InProgressSection extends ConsumerWidget {
+  final bool isDark;
+  const _InProgressSection({required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessions = ref
+        .watch(allInProgressSessionsProvider)
+        .maybeWhen(data: (list) => list, orElse: () => <InProgressSummary>[]);
+
+    if (sessions.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.play_circle_outline_rounded,
+                size: 16, color: Color(0xFF6C47FF)),
+            const SizedBox(width: 6),
+            Text(
+              'Phiên đang dở',
+              style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF111827),
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ...sessions.map((s) => _InProgressCard(session: s, isDark: isDark)),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
+class _InProgressCard extends StatelessWidget {
+  final InProgressSummary session;
+  final bool isDark;
+  const _InProgressCard({required this.session, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = session.totalQuestions;
+    final done  = session.answeredCount;
+    final pct   = total > 0 ? done / total : 0.0;
+
+    return GestureDetector(
+      onTap: () => context.go('/jobseeker/practice/${session.setId}'),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFF6C47FF).withValues(alpha: 0.3),
+          ),
+          boxShadow: isDark
+              ? []
+              : [
+                  BoxShadow(
+                    color: const Color(0xFF6C47FF).withValues(alpha: 0.06),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+        ),
+        child: Row(
+          children: [
+            // Company avatar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: session.companyLogo != null
+                  ? Image.network(
+                      session.companyLogo!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _CompanyAvatar(
+                        color: session.companyColor,
+                        initials: session.companyInitials,
+                        size: 40,
+                        fontSize: 13,
+                      ),
+                    )
+                  : _CompanyAvatar(
+                      color: session.companyColor,
+                      initials: session.companyInitials,
+                      size: 40,
+                      fontSize: 13,
+                    ),
+            ),
+            const SizedBox(width: 12),
+
+            // Title + progress
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    session.setTitle.isNotEmpty
+                        ? session.setTitle
+                        : 'Phiên luyện tập',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : const Color(0xFF111827),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    total > 0
+                        ? '$done/$total câu đã trả lời'
+                        : 'Đang tiếp tục...',
+                    style: TextStyle(
+                      color: isDark
+                          ? const Color(0xFF6B7280)
+                          : const Color(0xFF9CA3AF),
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: pct,
+                      backgroundColor: isDark
+                          ? const Color(0xFF2D3562)
+                          : const Color(0xFFE5E7EB),
+                      valueColor: const AlwaysStoppedAnimation(Color(0xFF6C47FF)),
+                      minHeight: 4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Continue button
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7C3AED), Color(0xFF6C47FF)],
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Tiếp tục',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Company Avatar ────────────────────────────────────────────────────────────
+
+class _CompanyAvatar extends StatelessWidget {
+  final Color color;
+  final String initials;
+  final double size;
+  final double fontSize;
+
+  const _CompanyAvatar({
+    required this.color,
+    required this.initials,
+    required this.size,
+    required this.fontSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      color: color,
+      child: Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -5,16 +5,80 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/i18n/app_localizations.dart';
-import '../../data/jobseeker_mock.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
-// Dark bg constants
-const _kBg     = Color(0xFF080B14);
-const _kCard   = Color(0xFF0D1117);
-const _kBorder = Color(0xFF1E2640);
 const _kPrimary = Color(0xFF6C47FF);
-const _kMuted  = Color(0xFF4A5578);
+
+// ── Theme colours ─────────────────────────────────────────────────────────────
+
+class _PracticeColors {
+  final Color bg;
+  final Color card;
+  final Color border;
+  final Color muted;
+  final Color primaryText;
+  final Color secondaryText;
+  final Color dotInactive;
+  final Color nextBtn;
+  final Color nextBtnDisabled;
+  final Color hintText;
+  final Color submittedText;
+  final Color dialogBg;
+  final Color divider;
+
+  const _PracticeColors._({
+    required this.bg,
+    required this.card,
+    required this.border,
+    required this.muted,
+    required this.primaryText,
+    required this.secondaryText,
+    required this.dotInactive,
+    required this.nextBtn,
+    required this.nextBtnDisabled,
+    required this.hintText,
+    required this.submittedText,
+    required this.dialogBg,
+    required this.divider,
+  });
+
+  factory _PracticeColors.of(bool isDark) => isDark ? _dark : _light;
+
+  static const _dark = _PracticeColors._(
+    bg:               Color(0xFF080B14),
+    card:             Color(0xFF0D1117),
+    border:           Color(0xFF1E2640),
+    muted:            Color(0xFF4A5578),
+    primaryText:      Colors.white,
+    secondaryText:    Color(0xFF9CAAC4),
+    dotInactive:      Color(0xFF2D3562),
+    nextBtn:          Color(0xFF1A1F35),
+    nextBtnDisabled:  Color(0xFF111827),
+    hintText:         Color(0xFF4A5578),
+    submittedText:    Color(0xFFD1D5DB),
+    dialogBg:         Color(0xFF1A1F35),
+    divider:          Color(0xFF1E2640),
+  );
+
+  static const _light = _PracticeColors._(
+    bg:               Color(0xFFF8FAFC),
+    card:             Colors.white,
+    border:           Color(0xFFE5E7EB),
+    muted:            Color(0xFF9CA3AF),
+    primaryText:      Color(0xFF111827),
+    secondaryText:    Color(0xFF6B7280),
+    dotInactive:      Color(0xFFD1D5DB),
+    nextBtn:          Color(0xFFF3F4F6),
+    nextBtnDisabled:  Color(0xFFE5E7EB),
+    hintText:         Color(0xFF9CA3AF),
+    submittedText:    Color(0xFF374151),
+    dialogBg:         Colors.white,
+    divider:          Color(0xFFE5E7EB),
+  );
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 class PracticeSessionScreen extends ConsumerStatefulWidget {
   final String setId;
@@ -34,7 +98,10 @@ class _PracticeSessionScreenState
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      ref.read(practiceSessionProvider(widget.setId).notifier).tick();
+      final st = ref.read(practiceSessionProvider(widget.setId));
+      if (!st.evaluating) {
+        ref.read(practiceSessionProvider(widget.setId).notifier).tick();
+      }
     });
   }
 
@@ -55,93 +122,178 @@ class _PracticeSessionScreenState
 
   @override
   Widget build(BuildContext context) {
-    final set = findSetById(widget.setId);
-    if (set == null) {
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
+    final colors  = _PracticeColors.of(isDark);
+    final state   = ref.watch(practiceSessionProvider(widget.setId));
+    final notifier = ref.read(practiceSessionProvider(widget.setId).notifier);
+    final l10n    = context.l10n;
+
+    // Navigate to result when session completes
+    ref.listen<PracticeSessionState>(
+      practiceSessionProvider(widget.setId),
+      (prev, next) {
+        if (next.isComplete && !(prev?.isComplete ?? false)) {
+          context.go('/jobseeker/practice/${widget.setId}/result');
+        }
+      },
+    );
+
+    // Submit-error toast with Retry
+    ref.listen<PracticeSessionState>(
+      practiceSessionProvider(widget.setId),
+      (prev, next) {
+        if (next.submitError != null && prev?.submitError == null) {
+          final qId = next.questions.isNotEmpty
+              ? next.questions[next.currentIndex].id
+              : '';
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              SnackBar(
+                content: Text(next.submitError!),
+                backgroundColor: const Color(0xFFEF4444),
+                duration: const Duration(seconds: 8),
+                action: SnackBarAction(
+                  label: 'Thử lại',
+                  textColor: Colors.white,
+                  onPressed: () => notifier.retrySubmit(qId),
+                ),
+              ),
+            );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) notifier.clearSubmitError();
+          });
+        }
+      },
+    );
+
+    // ── Loading ──────────────────────────────────────────────────────────────
+    if (state.isLoading) {
       return Scaffold(
-        backgroundColor: _kBg,
+        backgroundColor: colors.bg,
+        appBar: AppBar(
+          backgroundColor: colors.bg,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: Icon(Icons.close_rounded, color: colors.secondaryText),
+              onPressed: () => context.go('/jobseeker'),
+            ),
+          ],
+        ),
         body: Center(
-          child: Text('Set not found',
-              style: const TextStyle(color: Colors.white)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                  color: _kPrimary, strokeWidth: 2.5),
+              const SizedBox(height: 16),
+              Text(
+                'Đang tải phiên luyện tập...',
+                style: TextStyle(color: colors.muted, fontSize: 14),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    final state = ref.watch(practiceSessionProvider(widget.setId));
-    final notifier = ref.read(practiceSessionProvider(widget.setId).notifier);
-    final l10n = context.l10n;
-
-    final questions = set.questions;
-    if (questions.isEmpty) {
-      return const Scaffold(backgroundColor: _kBg);
+    // ── Error ────────────────────────────────────────────────────────────────
+    if (state.error != null) {
+      return Scaffold(
+        backgroundColor: colors.bg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off_rounded,
+                    size: 52, color: Color(0xFFEF4444)),
+                const SizedBox(height: 16),
+                Text(
+                  'Không thể tải phiên luyện tập',
+                  style: TextStyle(
+                      color: colors.primaryText,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  state.error!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: colors.muted, fontSize: 13),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: notifier.retry,
+                      icon: const Icon(Icons.refresh_rounded, size: 15),
+                      label: const Text('Thử lại'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _kPrimary,
+                        side: const BorderSide(color: _kPrimary),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    TextButton(
+                      onPressed: () => context.go('/jobseeker'),
+                      child: Text('Quay lại',
+                          style: TextStyle(color: colors.muted)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
-    final currentQ = questions[state.currentIndex];
+    // ── Empty questions guard ────────────────────────────────────────────────
+    if (state.questions.isEmpty) {
+      return Scaffold(
+        backgroundColor: colors.bg,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Phiên không có câu hỏi.',
+                  style: TextStyle(color: colors.muted)),
+              const SizedBox(height: 12),
+              TextButton(
+                  onPressed: () => context.go('/jobseeker'),
+                  child: const Text('Quay lại')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ── Main practice UI ─────────────────────────────────────────────────────
+    final questions   = state.questions;
+    final currentQ    = questions[state.currentIndex.clamp(0, questions.length - 1)];
     final isSubmitted = state.submitted[currentQ.id] == true;
     final currentAnswer = state.answers[currentQ.id] ?? '';
-    final timeLeft = state.timeLeft;
 
     return Scaffold(
-      backgroundColor: _kBg,
+      backgroundColor: colors.bg,
       appBar: AppBar(
-        backgroundColor: _kBg,
+        backgroundColor: colors.bg,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
         titleSpacing: 12,
-        title: Row(
-          children: [
-            // Company avatar
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: set.companyColor,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Text(
-                  set.companyInitials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    set.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    set.company,
-                    style: const TextStyle(
-                      color: Color(0xFF9CAAC4),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        title: _AppBarTitle(state: state, colors: colors),
         actions: [
-          // Timer
-          _TimerDisplay(timeLeft: timeLeft),
-          // Close / Exit
+          _TimerDisplay(timeLeft: state.timeLeft, colors: colors),
           IconButton(
-            icon: const Icon(Icons.close_rounded, color: Color(0xFF9CAAC4)),
+            icon: Icon(Icons.close_rounded, color: colors.secondaryText),
             onPressed: _showExitDialog,
           ),
         ],
@@ -151,6 +303,7 @@ class _PracticeSessionScreenState
             current: state.currentIndex + 1,
             total: questions.length,
             l10n: l10n,
+            colors: colors,
           ),
         ),
       ),
@@ -162,49 +315,102 @@ class _PracticeSessionScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Question card
-                  _QuestionCard(question: currentQ),
+                  _QuestionCard(question: currentQ, colors: colors),
                   const SizedBox(height: 16),
-
-                  // Answer area
                   if (state.evaluating)
-                    _EvaluatingWidget(l10n: l10n)
+                    _EvaluatingWidget(l10n: l10n, colors: colors)
                   else if (isSubmitted)
-                    _SubmittedWidget(answer: currentAnswer, l10n: l10n)
+                    _SubmittedWidget(
+                        answer: currentAnswer, l10n: l10n, colors: colors)
                   else
                     _AnswerInput(
                       key: ValueKey(currentQ.id),
                       questionId: currentQ.id,
                       initialValue: currentAnswer,
-                      onChanged: (v) => notifier.updateAnswer(currentQ.id, v),
+                      onChanged: (v) =>
+                          notifier.updateAnswer(currentQ.id, v),
                       onSubmit: () => notifier.submitAnswer(currentQ.id),
                       l10n: l10n,
+                      colors: colors,
                     ),
                 ],
               ),
             ),
           ),
-
-          // Dot navigator
           _DotNavigator(
             questions: questions,
             currentIndex: state.currentIndex,
             submitted: state.submitted,
             onTap: notifier.goTo,
+            colors: colors,
           ),
-
-          // Bottom nav bar
           _BottomBar(
             currentIndex: state.currentIndex,
             total: questions.length,
             allSubmitted: state.allSubmitted,
+            isCompleting: state.isCompleting,
             setId: widget.setId,
             onPrevious: notifier.previous,
             onNext: notifier.next,
+            onFinish: notifier.completeSession,
             l10n: l10n,
+            colors: colors,
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── AppBar title ──────────────────────────────────────────────────────────────
+
+class _AppBarTitle extends StatelessWidget {
+  final PracticeSessionState state;
+  final _PracticeColors colors;
+  const _AppBarTitle({required this.state, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: _kPrimary,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Center(
+            child: Text('P',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Phiên luyện tập',
+                style: TextStyle(
+                    color: colors.primaryText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                '${state.questions.length} câu hỏi',
+                style: TextStyle(
+                    color: colors.secondaryText, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -215,11 +421,13 @@ class _ProgressSection extends StatelessWidget {
   final int current;
   final int total;
   final AppLocalizations l10n;
+  final _PracticeColors colors;
 
   const _ProgressSection({
     required this.current,
     required this.total,
     required this.l10n,
+    required this.colors,
   });
 
   @override
@@ -232,7 +440,7 @@ class _ProgressSection extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
               value: total > 0 ? current / total : 0,
-              backgroundColor: _kBorder,
+              backgroundColor: colors.border,
               valueColor: const AlwaysStoppedAnimation(_kPrimary),
               minHeight: 4,
             ),
@@ -240,7 +448,8 @@ class _ProgressSection extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             l10n.questionNofTotal(current, total),
-            style: const TextStyle(color: Color(0xFF9CAAC4), fontSize: 11),
+            style:
+                TextStyle(color: colors.secondaryText, fontSize: 11),
           ),
         ],
       ),
@@ -252,7 +461,8 @@ class _ProgressSection extends StatelessWidget {
 
 class _TimerDisplay extends StatelessWidget {
   final int timeLeft;
-  const _TimerDisplay({required this.timeLeft});
+  final _PracticeColors colors;
+  const _TimerDisplay({required this.timeLeft, required this.colors});
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +477,7 @@ class _TimerDisplay extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: isRed ? const Color(0xFFEF4444) : Colors.white,
+          color: isRed ? const Color(0xFFEF4444) : colors.primaryText,
           fontSize: 14,
           fontWeight: FontWeight.w700,
           fontFeatures: const [FontFeature.tabularFigures()],
@@ -281,7 +491,8 @@ class _TimerDisplay extends StatelessWidget {
 
 class _QuestionCard extends StatelessWidget {
   final PracticeQuestion question;
-  const _QuestionCard({required this.question});
+  final _PracticeColors colors;
+  const _QuestionCard({required this.question, required this.colors});
 
   @override
   Widget build(BuildContext context) {
@@ -291,9 +502,18 @@ class _QuestionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _kCard,
+        color: colors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _kBorder),
+        border: Border.all(color: colors.border),
+        boxShadow: colors.bg == const Color(0xFFF8FAFC)
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,14 +522,16 @@ class _QuestionCard extends StatelessWidget {
             children: [
               _Pill(label: categoryLabel(question.category), color: catColor),
               const SizedBox(width: 8),
-              _Pill(label: difficultyLabel(question.difficulty), color: difColor),
+              _Pill(
+                  label: difficultyLabel(question.difficulty),
+                  color: difColor),
             ],
           ),
           const SizedBox(height: 14),
           Text(
             question.text,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colors.primaryText,
               fontSize: 17,
               fontWeight: FontWeight.w700,
               height: 1.5,
@@ -329,6 +551,7 @@ class _AnswerInput extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final VoidCallback onSubmit;
   final AppLocalizations l10n;
+  final _PracticeColors colors;
 
   const _AnswerInput({
     super.key,
@@ -337,6 +560,7 @@ class _AnswerInput extends StatefulWidget {
     required this.onChanged,
     required this.onSubmit,
     required this.l10n,
+    required this.colors,
   });
 
   @override
@@ -364,7 +588,8 @@ class _AnswerInputState extends State<_AnswerInput> {
 
   @override
   Widget build(BuildContext context) {
-    final len = _ctrl.text.length;
+    final c       = widget.colors;
+    final len     = _ctrl.text.length;
     final isEmpty = _ctrl.text.trim().isEmpty;
 
     return Column(
@@ -372,43 +597,45 @@ class _AnswerInputState extends State<_AnswerInput> {
       children: [
         Container(
           decoration: BoxDecoration(
-            color: _kCard,
+            color: c.card,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _kBorder),
+            border: Border.all(color: c.border),
+            boxShadow: c.bg == const Color(0xFFF8FAFC)
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
           ),
           child: TextField(
             controller: _ctrl,
             maxLines: 8,
             minLines: 5,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              height: 1.6,
-            ),
+            style: TextStyle(
+                color: c.primaryText, fontSize: 14, height: 1.6),
             cursorColor: _kPrimary,
             decoration: InputDecoration(
               hintText: widget.l10n.answerPlaceholder,
-              hintStyle: const TextStyle(color: _kMuted, fontSize: 14),
+              hintStyle:
+                  TextStyle(color: c.hintText, fontSize: 14),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.all(16),
             ),
           ),
         ),
         const SizedBox(height: 8),
-
-        // Char counter
         Text(
           widget.l10n.charsCount(len) +
               (len >= 150 ? '' : widget.l10n.charsRecommended),
           style: TextStyle(
-            color: len >= 150 ? const Color(0xFF10B981) : _kMuted,
+            color: len >= 150 ? const Color(0xFF10B981) : c.muted,
             fontSize: 12,
           ),
         ),
-
         const SizedBox(height: 12),
-
-        // Submit button
         SizedBox(
           width: double.infinity,
           child: Container(
@@ -418,20 +645,17 @@ class _AnswerInputState extends State<_AnswerInput> {
                   ? null
                   : const LinearGradient(
                       colors: [Color(0xFF7C3AED), Color(0xFF6C47FF)]),
-              color: isEmpty ? const Color(0xFF1A1F35) : null,
+              color: isEmpty ? c.nextBtn : null,
               borderRadius: BorderRadius.circular(10),
             ),
             child: ElevatedButton.icon(
               onPressed: isEmpty ? null : widget.onSubmit,
-              icon: Icon(
-                Icons.send_rounded,
-                size: 16,
-                color: isEmpty ? _kMuted : Colors.white,
-              ),
+              icon: Icon(Icons.send_rounded,
+                  size: 16, color: isEmpty ? c.muted : Colors.white),
               label: Text(
                 widget.l10n.submitAnswer,
                 style: TextStyle(
-                  color: isEmpty ? _kMuted : Colors.white,
+                  color: isEmpty ? c.muted : Colors.white,
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
@@ -455,27 +679,28 @@ class _AnswerInputState extends State<_AnswerInput> {
 
 class _EvaluatingWidget extends StatelessWidget {
   final AppLocalizations l10n;
-  const _EvaluatingWidget({required this.l10n});
+  final _PracticeColors colors;
+  const _EvaluatingWidget({required this.l10n, required this.colors});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 120,
       decoration: BoxDecoration(
-        color: _kCard,
+        color: colors.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _kBorder),
+        border: Border.all(color: colors.border),
       ),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(
-              color: _kPrimary, strokeWidth: 2.5),
+                color: _kPrimary, strokeWidth: 2.5),
             const SizedBox(height: 12),
             Text(
               l10n.evaluating_,
-              style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+              style: TextStyle(color: colors.muted, fontSize: 13),
             ),
           ],
         ),
@@ -489,19 +714,20 @@ class _EvaluatingWidget extends StatelessWidget {
 class _SubmittedWidget extends StatelessWidget {
   final String answer;
   final AppLocalizations l10n;
+  final _PracticeColors colors;
 
-  const _SubmittedWidget({required this.answer, required this.l10n});
+  const _SubmittedWidget(
+      {required this.answer, required this.l10n, required this.colors});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _kCard,
+        color: colors.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF10B981).withValues(alpha: 0.4),
-        ),
+            color: const Color(0xFF10B981).withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,11 +750,8 @@ class _SubmittedWidget extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             answer,
-            style: const TextStyle(
-              color: Color(0xFFD1D5DB),
-              fontSize: 14,
-              height: 1.6,
-            ),
+            style: TextStyle(
+                color: colors.submittedText, fontSize: 14, height: 1.6),
           ),
         ],
       ),
@@ -543,12 +766,14 @@ class _DotNavigator extends StatelessWidget {
   final int currentIndex;
   final Map<String, bool> submitted;
   final ValueChanged<int> onTap;
+  final _PracticeColors colors;
 
   const _DotNavigator({
     required this.questions,
     required this.currentIndex,
     required this.submitted,
     required this.onTap,
+    required this.colors,
   });
 
   @override
@@ -564,12 +789,10 @@ class _DotNavigator extends StatelessWidget {
             final i = e.key;
             final q = e.value;
             final isCurrent = i == currentIndex;
-            final isDone = submitted[q.id] == true;
+            final isDone    = submitted[q.id] == true;
 
-            Color color;
-            double width;
-            double height = 10;
-
+            final Color color;
+            final double width;
             if (isCurrent) {
               color = _kPrimary;
               width = 32;
@@ -577,7 +800,7 @@ class _DotNavigator extends StatelessWidget {
               color = const Color(0xFF10B981);
               width = 10;
             } else {
-              color = const Color(0xFF2D3562);
+              color = colors.dotInactive;
               width = 10;
             }
 
@@ -588,7 +811,7 @@ class _DotNavigator extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: width,
-                  height: height,
+                  height: 10,
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(5),
@@ -609,42 +832,47 @@ class _BottomBar extends StatelessWidget {
   final int currentIndex;
   final int total;
   final bool allSubmitted;
+  final bool isCompleting;
   final String setId;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
+  final Future<void> Function() onFinish;
   final AppLocalizations l10n;
+  final _PracticeColors colors;
 
   const _BottomBar({
     required this.currentIndex,
     required this.total,
     required this.allSubmitted,
+    required this.isCompleting,
     required this.setId,
     required this.onPrevious,
     required this.onNext,
+    required this.onFinish,
     required this.l10n,
+    required this.colors,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = colors;
     return Container(
       padding: EdgeInsets.fromLTRB(
           16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
-      decoration: const BoxDecoration(
-        color: _kBg,
-        border: Border(top: BorderSide(color: _kBorder)),
+      decoration: BoxDecoration(
+        color: c.bg,
+        border: Border(top: BorderSide(color: c.divider)),
       ),
       child: Row(
         children: [
-          // Previous
           Expanded(
             child: OutlinedButton(
               onPressed: currentIndex > 0 ? onPrevious : null,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
+                foregroundColor: c.primaryText,
+                disabledForegroundColor: c.muted,
                 side: BorderSide(
-                  color: currentIndex > 0
-                      ? const Color(0xFF2D3562)
-                      : const Color(0xFF1A1F35),
+                  color: currentIndex > 0 ? c.border : c.nextBtnDisabled,
                 ),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
@@ -654,21 +882,20 @@ class _BottomBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-
           if (allSubmitted) ...[
-            // Finish
             Expanded(
               flex: 2,
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF7C3AED), Color(0xFF6C47FF)],
+                  gradient: LinearGradient(
+                    colors: isCompleting
+                        ? [const Color(0xFF4B2D9F), const Color(0xFF4B2D9F)]
+                        : [const Color(0xFF7C3AED), const Color(0xFF6C47FF)],
                   ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: ElevatedButton(
-                  onPressed: () =>
-                      context.go('/jobseeker/practice/$setId/result'),
+                  onPressed: isCompleting ? null : onFinish,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
@@ -676,28 +903,33 @@ class _BottomBar extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: Text(
-                    l10n.finishGetFeedback,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+                  child: isCompleting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : Text(
+                          l10n.finishGetFeedback,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
                 ),
               ),
             ),
           ] else ...[
-            // Next
             Expanded(
               child: ElevatedButton(
-                onPressed:
-                    currentIndex < total - 1 ? onNext : null,
+                onPressed: currentIndex < total - 1 ? onNext : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A1F35),
-                  disabledBackgroundColor: const Color(0xFF111827),
-                  foregroundColor: Colors.white,
+                  backgroundColor: c.nextBtn,
+                  disabledBackgroundColor: c.nextBtnDisabled,
+                  foregroundColor: c.primaryText,
+                  disabledForegroundColor: c.muted,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -721,26 +953,30 @@ class _ExitDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
+    final colors  = _PracticeColors.of(isDark);
+    final l10n    = context.l10n;
 
     return AlertDialog(
-      backgroundColor: const Color(0xFF1A1F35),
+      backgroundColor: colors.dialogBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       title: Text(
         l10n.exitPractice,
-        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+        style: TextStyle(
+            color: colors.primaryText,
+            fontSize: 16,
+            fontWeight: FontWeight.w700),
       ),
       content: Text(
         l10n.exitPracticeBody,
-        style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14, height: 1.5),
+        style: TextStyle(
+            color: colors.muted, fontSize: 14, height: 1.5),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(
-            l10n.stay,
-            style: const TextStyle(color: Color(0xFF9CA3AF)),
-          ),
+          child: Text(l10n.stay,
+              style: TextStyle(color: colors.muted)),
         ),
         TextButton(
           onPressed: () {
@@ -749,7 +985,8 @@ class _ExitDialog extends StatelessWidget {
           },
           child: Text(
             l10n.exit,
-            style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w700),
+            style: const TextStyle(
+                color: Color(0xFFEF4444), fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -776,10 +1013,7 @@ class _Pill extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
+            color: color, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }

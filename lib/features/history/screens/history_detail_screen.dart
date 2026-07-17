@@ -2,8 +2,11 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../hr_generate/ask_ai/widgets/ask_ai_panel.dart';
 import '../../hr_generate/data/generation_api.dart';
 import '../../hr_generate/data/generation_repository.dart';
+import '../../hr_generate/domain/enums/difficulty_level.dart';
+import '../../hr_generate/domain/enums/question_type.dart';
 import '../../hr_generate/domain/models/generated_question.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
@@ -107,6 +110,8 @@ class DetailState {
   final bool isLoading;
   final bool isSaving;
   final bool isExporting;
+  final bool isPublishing;
+  final bool isPublished;
   final String? error;
   final String? successMsg;
 
@@ -116,6 +121,8 @@ class DetailState {
     this.isLoading   = true,
     this.isSaving    = false,
     this.isExporting = false,
+    this.isPublishing = false,
+    this.isPublished  = false,
     this.error,
     this.successMsg,
   });
@@ -126,18 +133,22 @@ class DetailState {
     bool? isLoading,
     bool? isSaving,
     bool? isExporting,
+    bool? isPublishing,
+    bool? isPublished,
     String? error,
     String? successMsg,
     bool clearMsg = false,
   }) =>
       DetailState(
-        session:     session     ?? this.session,
-        questions:   questions   ?? this.questions,
-        isLoading:   isLoading   ?? this.isLoading,
-        isSaving:    isSaving    ?? this.isSaving,
-        isExporting: isExporting ?? this.isExporting,
-        error:       error,
-        successMsg:  clearMsg ? null : (successMsg ?? this.successMsg),
+        session:      session      ?? this.session,
+        questions:    questions    ?? this.questions,
+        isLoading:    isLoading    ?? this.isLoading,
+        isSaving:     isSaving     ?? this.isSaving,
+        isExporting:  isExporting  ?? this.isExporting,
+        isPublishing: isPublishing ?? this.isPublishing,
+        isPublished:  isPublished  ?? this.isPublished,
+        error:        error,
+        successMsg:   clearMsg ? null : (successMsg ?? this.successMsg),
       );
 
   bool get hasUnsaved =>
@@ -260,7 +271,11 @@ class DetailNotifier extends StateNotifier<DetailState> {
 
       if (mounted) {
         state = state.copyWith(
-            session: session, questions: questions, isLoading: false);
+          session:     session,
+          questions:   questions,
+          isLoading:   false,
+          isPublished: session.status.toUpperCase() == 'PUBLISHED',
+        );
       }
     } catch (e) {
       if (mounted) state = state.copyWith(isLoading: false, error: _err(e));
@@ -442,6 +457,48 @@ class DetailNotifier extends StateNotifier<DetailState> {
 
   void clearMessages() => state = state.copyWith(error: null, clearMsg: true);
 
+  Future<void> publish() async {
+    final qSetId = state.session?.questionSetId;
+    if (qSetId == null || state.isPublishing) return;
+    state = state.copyWith(isPublishing: true, error: null);
+    try {
+      final dio = buildGenerationDio();
+      await dio.post('/api/hr/question-sets/$qSetId/publish');
+      if (mounted) {
+        state = state.copyWith(
+          isPublishing: false,
+          isPublished:  true,
+          successMsg:   'Đã publish bộ câu hỏi lên marketplace!',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(isPublishing: false, error: _err(e));
+      }
+    }
+  }
+
+  Future<void> unpublish() async {
+    final qSetId = state.session?.questionSetId;
+    if (qSetId == null || state.isPublishing) return;
+    state = state.copyWith(isPublishing: true, error: null);
+    try {
+      final dio = buildGenerationDio();
+      await dio.post('/api/hr/question-sets/$qSetId/unpublish');
+      if (mounted) {
+        state = state.copyWith(
+          isPublishing: false,
+          isPublished:  false,
+          successMsg:   'Đã gỡ bộ câu hỏi khỏi marketplace.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(isPublishing: false, error: _err(e));
+      }
+    }
+  }
+
   static String _err(Object e) {
     if (e is DioException) {
       final msg = e.response?.data?['message'];
@@ -562,6 +619,55 @@ class HistoryDetailScreen extends ConsumerWidget {
                 ),
               ],
             ),
+          // ── Publish / Unpublish button ──────────────────────────────
+          if (session?.questionSetId != null) ...[
+            if (dState.isPublishing)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                child: SizedBox(
+                  width:  20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Color(0xFF7C3AED)),
+                ),
+              )
+            else if (dState.isPublished)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: OutlinedButton.icon(
+                  onPressed: () =>
+                      _confirmUnpublish(context, notifier, isDark),
+                  icon:  const Icon(Icons.cloud_off_rounded, size: 14),
+                  label: const Text('Unpublish',
+                      style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF6B7280),
+                    side:            const BorderSide(color: Color(0xFF9CA3AF)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              )
+            else if (dState.questions.where((q) => !q.isDeleted).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: FilledButton.icon(
+                  onPressed: notifier.publish,
+                  icon:  const Icon(Icons.cloud_upload_rounded, size: 14),
+                  label: const Text('Publish',
+                      style: TextStyle(fontSize: 12)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C3AED),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+          ],
           if (dState.hasUnsaved)
             Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -590,13 +696,6 @@ class HistoryDetailScreen extends ConsumerWidget {
                     ),
             ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openAiPanel(context, sessionId, isDark),
-        backgroundColor: const Color(0xFF6C47FF),
-        icon:  const Icon(Icons.auto_awesome_rounded, size: 18),
-        label: const Text('AI Hỏi đáp',
-            style: TextStyle(fontWeight: FontWeight.w600)),
       ),
       body: dState.isLoading
           ? const Center(
@@ -660,6 +759,7 @@ class HistoryDetailScreen extends ConsumerWidget {
                             questions: dState.questions,
                             isDark:    isDark,
                             notifier:  notifier,
+                            sessionId: sessionId,
                           ),
                       ],
                       const SizedBox(height: 16),
@@ -668,6 +768,46 @@ class HistoryDetailScreen extends ConsumerWidget {
                 ),
               ],
             ),
+    );
+  }
+
+  void _confirmUnpublish(
+      BuildContext context, DetailNotifier notifier, bool isDark) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        title: Text('Gỡ khỏi marketplace?',
+            style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF111827))),
+        content: Text(
+          'Bộ câu hỏi sẽ không hiển thị cho ứng viên sau khi Unpublish.',
+          style: TextStyle(
+              fontSize: 13,
+              color: isDark
+                  ? const Color(0xFF9CA3AF)
+                  : const Color(0xFF6B7280)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Hủy',
+                style: TextStyle(
+                    color: isDark
+                        ? const Color(0xFF9CA3AF)
+                        : const Color(0xFF6B7280))),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              notifier.unpublish();
+            },
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF6B7280)),
+            child: const Text('Unpublish'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -704,11 +844,13 @@ class _QuestionList extends StatelessWidget {
   final List<EditableQuestion> questions;
   final bool isDark;
   final DetailNotifier notifier;
+  final String sessionId;
 
   const _QuestionList({
     required this.questions,
     required this.isDark,
     required this.notifier,
+    required this.sessionId,
   });
 
   @override
@@ -728,12 +870,13 @@ class _QuestionList extends StatelessWidget {
         itemBuilder: (_, liveIdx) {
           final entry = live[liveIdx];
           return _QuestionCard(
-            key:      ValueKey(entry.key),
-            index:    entry.key,
-            question: entry.value,
-            liveNum:  liveIdx + 1,
-            isDark:   isDark,
-            notifier: notifier,
+            key:       ValueKey(entry.key),
+            index:     entry.key,
+            question:  entry.value,
+            liveNum:   liveIdx + 1,
+            isDark:    isDark,
+            notifier:  notifier,
+            sessionId: sessionId,
           );
         },
       ),
@@ -770,6 +913,7 @@ class _QuestionCard extends StatelessWidget {
   final int liveNum;
   final bool isDark;
   final DetailNotifier notifier;
+  final String sessionId;
 
   const _QuestionCard({
     super.key,
@@ -778,6 +922,7 @@ class _QuestionCard extends StatelessWidget {
     required this.liveNum,
     required this.isDark,
     required this.notifier,
+    required this.sessionId,
   });
 
   @override
@@ -896,7 +1041,59 @@ class _QuestionCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Expanded details
+              // ── Lịch sử AI Chat pill ─────────────────────────────────
+              if (question.id != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                    onTap: () => showAskAiSheet(
+                      context,
+                      readOnly: true,
+                      question: GeneratedQuestion(
+                        id:           question.id!,
+                        question:     q['question']?.toString() ?? '',
+                        questionType: HrQuestionType.fromString(
+                            q['questionType']?.toString() ?? 'technical'),
+                        difficulty:   HrDifficultyLevel.fromString(
+                            q['difficulty']?.toString() ?? 'medium'),
+                        rationale:    q['rationale']?.toString(),
+                        sampleAnswer: q['sampleAnswer']?.toString(),
+                        orderIndex:   ((q['orderIndex'] ?? 0) as num).toInt(),
+                      ),
+                      jobId: sessionId,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6D28D9), Color(0xFF7C3AED)],
+                          begin:  Alignment.topLeft,
+                          end:    Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.history_rounded,
+                              size: 13, color: Colors.white),
+                          SizedBox(width: 5),
+                          Text('Lịch sử AI',
+                              style: TextStyle(
+                                  color:      Colors.white,
+                                  fontSize:   12,
+                                  fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  ),
+                ),
+
+              // ── Expanded details ──────────────────────────────────────────
               if (question.expanded) ...[
                 Divider(
                   height: 1,

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/i18n/app_localizations.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../data/jobseeker_mock.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
@@ -17,14 +16,22 @@ class JobseekerHistoryScreen extends ConsumerWidget {
     final l10n = context.l10n;
     final filter = ref.watch(historyFilterProvider);
     final sessions = ref.watch(filteredSessionsProvider);
+    final historyAsync = ref.watch(practiceHistoryProvider);
+    final statsAsync = ref.watch(practiceStatsProvider);
 
-    // Stat values from all sessions
-    final all = practiceSessions;
-    final total = all.length;
-    final best = all.isEmpty ? 0 : all.map((s) => s.score).reduce((a, b) => a > b ? a : b);
-    final avgScore = all.isEmpty
-        ? 0
-        : (all.map((s) => s.score).reduce((a, b) => a + b) / all.length).round();
+    // Stats: prefer API endpoint, fallback to deriving from loaded sessions
+    final allLoaded = historyAsync.maybeWhen(
+      data: (list) => list, orElse: () => <PracticeSession>[]);
+    final apiStats = statsAsync.maybeWhen(data: (s) => s, orElse: () => null);
+    final total = apiStats?.totalSessions ?? allLoaded.length;
+    final best = apiStats?.bestScore ??
+        (allLoaded.isEmpty ? 0 : allLoaded.map((s) => s.score).reduce((a, b) => a > b ? a : b));
+    final avgScore = apiStats?.avgScore ??
+        (allLoaded.isEmpty
+            ? 0
+            : (allLoaded.map((s) => s.score).reduce((a, b) => a + b) / allLoaded.length).round());
+    final isLoading = historyAsync.isLoading;
+    final loadError = historyAsync.error;
 
     final bg = isDark ? const Color(0xFF070A13) : const Color(0xFFF8FAFC);
     final cardBg = isDark ? const Color(0xFF1A1F35) : Colors.white;
@@ -80,7 +87,49 @@ class JobseekerHistoryScreen extends ConsumerWidget {
             const SizedBox(height: 16),
 
             // Sessions list
-            if (sessions.isEmpty)
+            if (isLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: CircularProgressIndicator(
+                      color: Color(0xFF6C47FF), strokeWidth: 2.5),
+                ),
+              )
+            else if (loadError != null)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.wifi_off_rounded,
+                          size: 40, color: Color(0xFFEF4444)),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Không thể tải lịch sử',
+                        style: TextStyle(
+                          color: isDark ? Colors.white : const Color(0xFF111827),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            ref.invalidate(practiceHistoryProvider),
+                        icon: const Icon(Icons.refresh_rounded, size: 15),
+                        label: const Text('Thử lại'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF6C47FF),
+                          side: const BorderSide(color: Color(0xFF6C47FF)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (sessions.isEmpty)
               _EmptyState(isDark: isDark, l10n: l10n).animate().fadeIn()
             else
               Column(
@@ -93,7 +142,8 @@ class JobseekerHistoryScreen extends ConsumerWidget {
                       cardBg: cardBg,
                       borderC: borderC,
                       l10n: l10n,
-                    ).animate().fadeIn(delay: Duration(milliseconds: e.key * 60)),
+                    ).animate().fadeIn(
+                        delay: Duration(milliseconds: e.key * 60)),
                   );
                 }).toList(),
               ),
@@ -392,23 +442,27 @@ class _SessionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Company avatar
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: session.companyColor,
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Center(
-              child: Text(
-                session.companyInitials,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: session.companyLogo != null
+                ? Image.network(
+                    session.companyLogo!,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _CompanyAvatar(
+                      color: session.companyColor,
+                      initials: session.companyInitials,
+                      size: 44,
+                      fontSize: 16,
+                    ),
+                  )
+                : _CompanyAvatar(
+                    color: session.companyColor,
+                    initials: session.companyInitials,
+                    size: 44,
+                    fontSize: 16,
+                  ),
           ),
           const SizedBox(width: 12),
 
@@ -545,6 +599,41 @@ class _SessionCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Company Avatar ────────────────────────────────────────────────────────────
+
+class _CompanyAvatar extends StatelessWidget {
+  final Color color;
+  final String initials;
+  final double size;
+  final double fontSize;
+
+  const _CompanyAvatar({
+    required this.color,
+    required this.initials,
+    required this.size,
+    required this.fontSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      color: color,
+      child: Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
