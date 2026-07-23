@@ -41,6 +41,8 @@ import '../../features/jobseeker/screens/feedback/feedback_screen.dart';
 import '../../features/jobseeker/screens/history/jobseeker_history_screen.dart';
 import '../../features/jobseeker/screens/profile/jobseeker_profile_screen.dart';
 import '../../features/jobseeker/screens/settings/jobseeker_settings_screen.dart';
+import '../../features/hr_generate/presentation/screens/recommendation_list_screen.dart';
+import '../../features/hr_generate/presentation/screens/recommendation_detail_screen.dart';
 
 final _rootKey           = GlobalKey<NavigatorState>();
 // HR tab branch keys — one per bottom-nav slot
@@ -161,6 +163,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             HistoryDetailScreen(sessionId: state.pathParameters['id']!),
       ),
 
+      // ── Recommendation detail — full-screen outside shell ─────────────────
+      GoRoute(
+        path:               '/hr/recommendations/:id',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) => RecommendationDetailScreen(
+          recommendationId: state.pathParameters['id']!,
+        ),
+      ),
+
       // ── HR Shell (StatefulShellRoute keeps each tab alive) ───────────────
       StatefulShellRoute.indexedStack(
         builder: (_, state, shell) => HRAppShell(
@@ -202,6 +213,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path:    '/hr/interviews',
                 builder: (_, __) => const InterviewsScreen(),
+              ),
+              GoRoute(
+                path:    '/hr/recommendations',
+                builder: (_, __) => const RecommendationListScreen(),
               ),
             ],
           ),
