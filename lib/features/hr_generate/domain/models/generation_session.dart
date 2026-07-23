@@ -103,7 +103,9 @@ class GenerationSession {
 
     return GenerationSession(
       id:                id,
-      jobTitle:          planDraft?.role ?? jdContent?.split('\n').first ?? '',
+      jobTitle:          (j['title'] as String?)?.trim().isNotEmpty == true
+                             ? (j['title'] as String).trim()
+                             : planDraft?.role ?? jdContent?.split('\n').first ?? '',
       jdContent:         jdContent,
       status:            status,
       rawPhase:          rawPhase,

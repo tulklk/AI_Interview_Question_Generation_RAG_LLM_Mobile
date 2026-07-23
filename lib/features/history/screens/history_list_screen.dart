@@ -19,6 +19,8 @@ class HistorySession {
   final String status;
   final DateTime? createdAt;
   final int? questionCount;
+  final String? questionSetId;
+  final bool isPublished;
 
   const HistorySession({
     required this.id,
@@ -29,15 +31,46 @@ class HistorySession {
     required this.status,
     this.createdAt,
     this.questionCount,
+    this.questionSetId,
+    this.isPublished = false,
   });
 
+  HistorySession copyWith({bool? isPublished}) => HistorySession(
+        id:            id,
+        jobTitle:      jobTitle,
+        role:          role,
+        level:         level,
+        difficulty:    difficulty,
+        status:        status,
+        createdAt:     createdAt,
+        questionCount: questionCount,
+        questionSetId: questionSetId,
+        isPublished:   isPublished ?? this.isPublished,
+      );
+
   factory HistorySession.fromJson(Map<String, dynamic> j) {
-    final plan  = j['planDraft'] ?? j['plan'] ?? const {};
-    final input = j['input'] is Map ? j['input'] as Map : const {};
+    final plan    = j['planDraft'] ?? j['plan'] ?? const {};
+    final input   = j['input'] is Map ? j['input'] as Map : const {};
+    final meta    = j['meta']    is Map ? j['meta']    as Map : const {};
+    final actions = j['actions'] is Map ? j['actions'] as Map : const {};
 
     final planRole = plan is Map
         ? (plan['roleTitle'] ?? plan['role'])?.toString()
         : null;
+
+    final questionSetId = (meta['questionSetId']
+            ?? actions['questionSetId']
+            ?? j['questionSetId'])
+        ?.toString();
+
+    bool isPublished = j['isPublished'] as bool? ?? false;
+    if (!isPublished) {
+      final rawStatus = (j['status'] ?? '').toString().toUpperCase();
+      final pubStatus = (j['publishStatus'] ?? j['publishedStatus'] ?? '').toString().toUpperCase();
+      isPublished = rawStatus == 'PUBLISHED' ||
+          pubStatus == 'PUBLISHED' ||
+          j['publishedAt'] != null;
+    }
 
     return HistorySession(
       id:         (j['jobId'] ?? j['id'] ?? j['job_id'])?.toString() ?? '',
@@ -56,6 +89,8 @@ class HistorySession {
           ? DateTime.tryParse(j['createdAt'].toString())
           : null,
       questionCount: j['questionCount'] as int?,
+      questionSetId: questionSetId,
+      isPublished:   isPublished,
     );
   }
 
@@ -148,24 +183,58 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
 
   Timer? _poll;
 
+  // ── Shared fetch logic used by both load() and poll ───────────────────────
+
+  static Future<List<HistorySession>> _fetchMergedSessions() async {
+    final dio = buildGenerationDio();
+
+    // Jobs endpoint (all statuses including in-progress)
+    final jobResp = await dio.get('/api/hr/question-generation-jobs');
+    final jobList = _extractList(jobResp.data);
+
+    // Question-sets endpoint (title + publish status) — optional
+    final qSetByJobId = <String, Map<String, dynamic>>{};
+    try {
+      final qsResp = await dio.get('/api/hr/question-sets');
+      for (final raw in _extractList(qsResp.data)) {
+        final qs = raw is Map ? Map<String, dynamic>.from(raw) : null;
+        if (qs == null) continue;
+        final jobId = (qs['jobId'] ?? qs['job_id'])?.toString();
+        if (jobId != null && jobId.isNotEmpty) qSetByJobId[jobId] = qs;
+      }
+    } catch (_) {}
+
+    final sessions = jobList.map((raw) {
+      if (raw is! Map) return null;
+      final job = Map<String, dynamic>.from(raw);
+      final jobId = (job['jobId'] ?? job['id'] ?? job['job_id'])?.toString() ?? '';
+      final qSet = qSetByJobId[jobId];
+      if (qSet != null) {
+        // Overlay question-set fields — ??= keeps existing value if already set
+        job['title']         ??= qSet['title'];
+        job['questionSetId'] ??= qSet['questionSetId'];
+        job['publishedAt']   ??= qSet['publishedAt'];
+        final alreadyPublished = (job['isPublished'] as bool?) ?? false;
+        if (!alreadyPublished) {
+          job['isPublished'] = (qSet['status']?.toString().toUpperCase() == 'PUBLISHED') ||
+              qSet['publishedAt'] != null;
+        }
+      }
+      return HistorySession.fromJson(job);
+    }).whereType<HistorySession>().toList()
+      ..sort((a, b) {
+        final ta = a.createdAt ?? DateTime(0);
+        final tb = b.createdAt ?? DateTime(0);
+        return tb.compareTo(ta);
+      });
+
+    return sessions;
+  }
+
   Future<void> load() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final dio  = buildGenerationDio();
-      final resp = await dio.get('/api/hr/question-generation-jobs');
-      final list = _extractList(resp.data);
-      final sessions = list
-          .map((e) => HistorySession.fromJson(e as Map<String, dynamic>))
-          .toList()
-        ..sort((a, b) {
-          final ta = a.createdAt ?? DateTime(0);
-          final tb = b.createdAt ?? DateTime(0);
-          return tb.compareTo(ta);
-        });
-      if (list.isNotEmpty) {
-        debugPrint('[History] first item keys: ${(list.first as Map).keys.toList()}');
-        debugPrint('[History] first item: ${list.first}');
-      }
+      final sessions = await _fetchMergedSessions();
       state = state.copyWith(sessions: sessions, isLoading: false);
       _maybeStartPoll(sessions);
     } catch (e) {
@@ -182,17 +251,9 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
         return;
       }
       try {
-        final dio  = buildGenerationDio();
-        final resp = await dio.get('/api/hr/question-generation-jobs');
-        final sessions = _extractList(resp.data)
-            .map((e) => HistorySession.fromJson(e as Map<String, dynamic>))
-            .toList()
-          ..sort((a, b) {
-            final ta = a.createdAt ?? DateTime(0);
-            final tb = b.createdAt ?? DateTime(0);
-            return tb.compareTo(ta);
-          });
-        state = state.copyWith(sessions: sessions);
+        // Use the same merged fetch so poll doesn't strip title/publish data
+        final updated = await _fetchMergedSessions();
+        if (mounted) state = state.copyWith(sessions: updated);
       } catch (_) {}
     });
   }
@@ -245,6 +306,50 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
     } catch (e) {
       state = state.copyWith(sessions: previous, error: _err(e));
       return false;
+    }
+  }
+
+  void _setPublished(String sessionId, bool val) {
+    state = state.copyWith(
+      sessions: state.sessions
+          .map((s) => s.id == sessionId ? s.copyWith(isPublished: val) : s)
+          .toList(),
+    );
+  }
+
+  Future<void> publishSession(String sessionId) async {
+    final session = state.sessions.firstWhere((s) => s.id == sessionId,
+        orElse: () => const HistorySession(id: '', status: ''));
+    final qSetId = session.questionSetId;
+    if (qSetId == null || qSetId.isEmpty) return;
+
+    _setPublished(sessionId, true);
+    try {
+      final dio = buildGenerationDio();
+      await dio.post('/api/hr/question-sets/$qSetId/publish');
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) return; // already published — our update is correct
+      _setPublished(sessionId, false);
+      state = state.copyWith(error: _err(e));
+    } catch (e) {
+      _setPublished(sessionId, false);
+      state = state.copyWith(error: _err(e));
+    }
+  }
+
+  Future<void> unpublishSession(String sessionId) async {
+    final session = state.sessions.firstWhere((s) => s.id == sessionId,
+        orElse: () => const HistorySession(id: '', status: ''));
+    final qSetId = session.questionSetId;
+    if (qSetId == null || qSetId.isEmpty) return;
+
+    _setPublished(sessionId, false);
+    try {
+      final dio = buildGenerationDio();
+      await dio.post('/api/hr/question-sets/$qSetId/unpublish');
+    } catch (e) {
+      _setPublished(sessionId, true);
+      state = state.copyWith(error: _err(e));
     }
   }
 
@@ -417,11 +522,13 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
                   ...hState.filtered.map((s) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child:   _SessionCard(
-                          session:  s,
-                          isDark:   isDark,
-                          onView:   () => _openSession(context, s),
-                          onDelete: () =>
-                              _confirmDelete(context, s, notifier),
+                          key:         ValueKey(s.id),
+                          session:     s,
+                          isDark:      isDark,
+                          onView:      () => _openSession(context, s),
+                          onDelete:    () => _confirmDelete(context, s, notifier),
+                          onPublish:   () => notifier.publishSession(s.id),
+                          onUnpublish: () => notifier.unpublishSession(s.id),
                         ),
                       )),
 
@@ -598,63 +705,97 @@ class _FilterChip extends StatelessWidget {
       );
 }
 
-class _SessionCard extends StatelessWidget {
+class _SessionCard extends StatefulWidget {
   final HistorySession session;
   final bool isDark;
   final VoidCallback onView;
   final VoidCallback onDelete;
+  final Future<void> Function() onPublish;
+  final Future<void> Function() onUnpublish;
 
   const _SessionCard({
+    super.key,
     required this.session,
     required this.isDark,
     required this.onView,
     required this.onDelete,
+    required this.onPublish,
+    required this.onUnpublish,
   });
 
+  @override
+  State<_SessionCard> createState() => _SessionCardState();
+}
+
+class _SessionCardState extends State<_SessionCard> {
+  bool _toggling = false;
+
   Color get _statusColor {
-    switch (session.status) {
-      case 'COMPLETED':    return const Color(0xFF10B981);
+    switch (widget.session.status) {
+      case 'COMPLETED':     return const Color(0xFF10B981);
       case 'PLAN_PROPOSED': return const Color(0xFF3B82F6);
-      case 'FAILED':       return const Color(0xFFEF4444);
-      default:             return const Color(0xFFF59E0B);
+      case 'FAILED':        return const Color(0xFFEF4444);
+      default:              return const Color(0xFFF59E0B);
     }
   }
 
   String _statusLabel(BuildContext context) {
     final l = context.l10n;
-    switch (session.status) {
+    switch (widget.session.status) {
       case 'COMPLETED':     return l.completed;
       case 'PLAN_PROPOSED': return 'Plan Ready';
       case 'FAILED':        return l.failed;
       case 'PROCESSING':    return '${l.processing}…';
       case 'QUEUED':        return 'Queued…';
-      default:              return session.status;
+      default:              return widget.session.status;
     }
   }
 
+  Future<void> _toggle() async {
+    if (_toggling) return;
+    setState(() => _toggling = true);
+    if (widget.session.isPublished) {
+      await widget.onUnpublish();
+    } else {
+      await widget.onPublish();
+    }
+    if (mounted) setState(() => _toggling = false);
+  }
+
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1F35) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: isDark
-                  ? const Color(0xFF2D3562)
-                  : const Color(0xFFE5E7EB)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+  Widget build(BuildContext context) {
+    final s         = widget.session;
+    final isDark    = widget.isDark;
+    final canPublish = s.status.toUpperCase() == 'COMPLETED' && s.questionSetId != null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: isDark ? const Color(0xFF2D3562) : const Color(0xFFEEEFF2)),
+        boxShadow: isDark
+            ? null
+            : [BoxShadow(color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ─────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 13, 14, 0),
+            child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    session.displayTitle,
+                    s.displayTitle,
                     style: TextStyle(
                         color:      isDark ? Colors.white : const Color(0xFF111827),
                         fontSize:   14,
-                        fontWeight: FontWeight.w600),
+                        fontWeight: FontWeight.w600,
+                        height:     1.3),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -662,70 +803,138 @@ class _SessionCard extends StatelessWidget {
                 _StatusBadge(label: _statusLabel(context), color: _statusColor),
               ],
             ),
-            const SizedBox(height: 6),
-            Wrap(
+          ),
+          const SizedBox(height: 8),
+
+          // ── Meta chips ─────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Wrap(
               spacing: 6,
               runSpacing: 4,
               children: [
-                if (session.level != null)
-                  _MetaChip(label: session.level!, isDark: isDark),
-                if (session.difficulty != null)
-                  _MetaChip(label: session.difficulty!, isDark: isDark),
-                if (session.questionCount != null)
-                  _MetaChip(
-                      label:  '${session.questionCount} Qs',
-                      isDark: isDark),
+                if (s.questionCount != null)
+                  _MetaChip(label: '${s.questionCount} câu', isDark: isDark),
+                if (s.level != null)
+                  _MetaChip(label: s.level!, isDark: isDark),
+                if (s.difficulty != null)
+                  _MetaChip(label: s.difficulty!, isDark: isDark),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
+          ),
+          const SizedBox(height: 10),
+
+          // ── Divider ────────────────────────────────────────────────
+          Divider(height: 1, thickness: 1,
+              color: isDark ? const Color(0xFF252D47) : const Color(0xFFF3F4F6)),
+
+          // ── Footer ─────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+            child: Row(
               children: [
-                Text(
-                  _relativeDate(session.createdAt),
-                  style: const TextStyle(
-                      color: Color(0xFF6B7280), fontSize: 11),
-                ),
+                // Date
+                Text(_relativeDate(s.createdAt),
+                    style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 11)),
+
+                // Publish pill (completed sessions only)
+                if (canPublish) ...[
+                  const SizedBox(width: 8),
+                  _toggling
+                      ? const SizedBox(
+                          width: 12, height: 12,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 1.5, color: Color(0xFF6C47FF)))
+                      : GestureDetector(
+                          onTap: _toggle,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: s.isPublished
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.10)
+                                  : isDark
+                                      ? const Color(0xFF252D47)
+                                      : const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  s.isPublished
+                                      ? Icons.public_rounded
+                                      : Icons.upload_rounded,
+                                  size: 11,
+                                  color: s.isPublished
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFF6B7280),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  s.isPublished ? 'Marketplace' : 'Publish',
+                                  style: TextStyle(
+                                    fontSize:   10,
+                                    fontWeight: FontWeight.w600,
+                                    color: s.isPublished
+                                        ? const Color(0xFF10B981)
+                                        : const Color(0xFF6B7280),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                ],
+
                 const Spacer(),
+
+                // View button
                 TextButton(
-                  onPressed: onView,
+                  onPressed: widget.onView,
                   style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFF6C47FF),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 4),
+                          horizontal: 10, vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                   child: Text('${context.l10n.viewDetail} →',
-                      style: const TextStyle(fontSize: 12)),
+                      style: const TextStyle(fontSize: 12,
+                          fontWeight: FontWeight.w500)),
                 ),
-                const SizedBox(width: 4),
-                IconButton(
-                  onPressed: onDelete,
-                  icon:      const Icon(Icons.delete_outline_rounded,
-                      size: 18, color: Color(0xFF6B7280)),
-                  padding:   EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                      minWidth: 28, minHeight: 28),
+
+                // Delete
+                SizedBox(
+                  width: 32, height: 32,
+                  child: IconButton(
+                    onPressed: widget.onDelete,
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        size: 17, color: Color(0xFFD1D5DB)),
+                  ),
                 ),
               ],
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 
   String _relativeDate(DateTime? dt) {
     if (dt == null) return '';
     final diff = DateTime.now().difference(dt);
-    if (diff.inDays == 0)  return 'Today';
-    if (diff.inDays == 1)  return 'Yesterday';
-    if (diff.inDays < 7)   return '${diff.inDays} days ago';
-    return '${dt.day.toString().padLeft(2,'0')} '
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7)  return '${diff.inDays} days ago';
+    return '${dt.day.toString().padLeft(2, '0')} '
         '${_months[dt.month - 1]} '
         '${dt.year}';
   }
 
   static const _months = [
-    'Jan','Feb','Mar','Apr','May','Jun',
-    'Jul','Aug','Sep','Oct','Nov','Dec'
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
 }
 

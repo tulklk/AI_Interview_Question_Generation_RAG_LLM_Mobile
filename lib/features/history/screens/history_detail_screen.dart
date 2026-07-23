@@ -14,6 +14,7 @@ import '../../hr_generate/domain/models/generated_question.dart';
 class DetailSession {
   final String id;
   final String? jobTitle;
+  final String? questionSetTitle;
   final String status;
   final String? failureMessage;
   final Map<String, dynamic>? planDraft;
@@ -22,11 +23,24 @@ class DetailSession {
   const DetailSession({
     required this.id,
     this.jobTitle,
+    this.questionSetTitle,
     required this.status,
     this.failureMessage,
     this.planDraft,
     this.questionSetId,
   });
+
+  String get displayTitle => questionSetTitle ?? jobTitle ?? 'Interview Session';
+
+  DetailSession withQuestionSetTitle(String title) => DetailSession(
+        id:               id,
+        jobTitle:         jobTitle,
+        questionSetTitle: title,
+        status:           status,
+        failureMessage:   failureMessage,
+        planDraft:        planDraft,
+        questionSetId:    questionSetId,
+      );
 
   factory DetailSession.fromJson(Map<String, dynamic> j) {
     dynamic raw = j;
@@ -218,6 +232,27 @@ class DetailNotifier extends StateNotifier<DetailState> {
         .toList();
   }
 
+  Future<({bool isPublished, String? title})> _fetchQuestionSetInfo(String questionSetId) async {
+    try {
+      final dio = buildGenerationDio();
+      final res = await dio.get('/api/hr/question-sets/$questionSetId');
+      dynamic data = res.data;
+      for (var i = 0; i < 3; i++) {
+        if (data is Map && data['data'] is Map) { data = data['data']; continue; }
+        break;
+      }
+      if (data is Map) {
+        bool isPublished = data['isPublished'] as bool? ?? false;
+        if (!isPublished) {
+          final rawStatus = (data['status'] ?? '').toString().toUpperCase();
+          isPublished = rawStatus == 'PUBLISHED' || data['publishedAt'] != null;
+        }
+        return (isPublished: isPublished, title: data['title']?.toString());
+      }
+    } catch (_) {}
+    return (isPublished: false, title: null);
+  }
+
   Future<List<EditableQuestion>> _fetchQuestions(
     String jobId,
     String? questionSetId,
@@ -250,7 +285,7 @@ class DetailNotifier extends StateNotifier<DetailState> {
     try {
       final genSession = await _repo.getSession(sessionId);
 
-      final session = DetailSession(
+      var session = DetailSession(
         id: genSession.id.isNotEmpty ? genSession.id : sessionId,
         jobTitle: genSession.jobTitle.isNotEmpty ? genSession.jobTitle : null,
         status: genSession.rawPhase.isNotEmpty
@@ -269,12 +304,21 @@ class DetailNotifier extends StateNotifier<DetailState> {
         );
       }
 
+      bool isPublished = session.status.toUpperCase() == 'PUBLISHED';
+      if (session.questionSetId != null) {
+        final info = await _fetchQuestionSetInfo(session.questionSetId!);
+        isPublished = info.isPublished;
+        if (info.title != null) {
+          session = session.withQuestionSetTitle(info.title!);
+        }
+      }
+
       if (mounted) {
         state = state.copyWith(
           session:     session,
           questions:   questions,
           isLoading:   false,
-          isPublished: session.status.toUpperCase() == 'PUBLISHED',
+          isPublished: isPublished,
         );
       }
     } catch (e) {
@@ -471,10 +515,21 @@ class DetailNotifier extends StateNotifier<DetailState> {
           successMsg:   'Đã publish bộ câu hỏi lên marketplace!',
         );
       }
-    } catch (e) {
-      if (mounted) {
-        state = state.copyWith(isPublishing: false, error: _err(e));
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        // Already published — treat as success
+        if (mounted) {
+          state = state.copyWith(
+            isPublishing: false,
+            isPublished:  true,
+            successMsg:   'Bộ câu hỏi đã được publish trên marketplace.',
+          );
+        }
+        return;
       }
+      if (mounted) state = state.copyWith(isPublishing: false, error: _err(e));
+    } catch (e) {
+      if (mounted) state = state.copyWith(isPublishing: false, error: _err(e));
     }
   }
 
@@ -501,8 +556,11 @@ class DetailNotifier extends StateNotifier<DetailState> {
 
   static String _err(Object e) {
     if (e is DioException) {
-      final msg = e.response?.data?['message'];
-      if (msg is String) return msg;
+      final body = e.response?.data;
+      if (body is Map) {
+        final msg = body['message'] ?? body['error'];
+        if (msg is String) return msg;
+      }
       return 'Network error (${e.response?.statusCode ?? 'no response'})';
     }
     return e.toString();
@@ -556,7 +614,7 @@ class HistoryDetailScreen extends ConsumerWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          session?.jobTitle ?? 'Chi tiết phiên',
+          session?.displayTitle ?? 'Chi tiết phiên',
           style: TextStyle(
               color:      isDark ? Colors.white : const Color(0xFF111827),
               fontSize:   17,
