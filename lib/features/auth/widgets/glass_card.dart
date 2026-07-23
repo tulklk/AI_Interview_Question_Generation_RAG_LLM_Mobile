@@ -73,12 +73,7 @@ class _GlassCardState extends State<GlassCard> with TickerProviderStateMixin {
                           ? const Color(0xFF0F1729).withValues(alpha: 0.65)
                           : Colors.white.withValues(alpha: 0.65),
                       borderRadius: BorderRadius.circular(20),
-                      border: widget.hasFocus
-                          ? Border.all(
-                              color: AppColors.brandPurple,
-                              width: 1.5,
-                            )
-                          : null,
+                      border: null,
                       boxShadow: [
                         // Breathe purple
                         BoxShadow(

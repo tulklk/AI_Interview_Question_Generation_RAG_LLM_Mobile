@@ -47,7 +47,7 @@ class HRAppShell extends ConsumerWidget {
           RepaintBoundary(child: navigationShell),
           if (showBadge)
             Positioned(
-              bottom: isWide ? 24 : 88,
+              bottom: isWide ? 24 : 76,
               right:  16,
               child:  const GenerationProgressBadge(),
             ),
@@ -60,10 +60,6 @@ class HRAppShell extends ConsumerWidget {
               isDark:          isDark,
               navigationShell: navigationShell,
             ),
-      floatingActionButton: isWide
-          ? null
-          : _HRCenterFab(currentLocation: currentLocation),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 }
@@ -85,29 +81,24 @@ class _AppBar extends ConsumerWidget implements PreferredSizeWidget {
     if (location.startsWith('/hr/knowledge')) return l10n.knowledgeBase;
     if (location.startsWith('/hr/settings')) return l10n.settings;
     if (location.startsWith('/hr/profile')) return l10n.profile;
+    if (location.startsWith('/hr/recommendations')) return 'Ứng viên đề xuất';
     return l10n.appName;
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final l10n = context.l10n;
-    final lang = ref.watch(languageProvider);
-    final thMode = ref.watch(themeProvider);
-    final user = ref.watch(authProvider).user;
-
-    final themeIcon = thMode == ThemeMode.dark
-        ? Icons.light_mode_rounded
-        : Icons.dark_mode_rounded;
+    final l10n   = context.l10n;
+    final user   = ref.watch(authProvider).user;
 
     return AppBar(
       toolbarHeight: 56,
       backgroundColor: isDark ? const Color(0xFF0B1020) : Colors.white,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.black.withValues(alpha: 0.08),
       leading: Builder(
         builder: (ctx) => IconButton(
+          tooltip: 'Menu',
           icon: Icon(Icons.menu_rounded,
               color: isDark ? Colors.white : const Color(0xFF111827)),
           onPressed: () => Scaffold.of(ctx).openDrawer(),
@@ -122,83 +113,54 @@ class _AppBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
-        // Theme toggle
-        IconButton(
-          icon: Icon(themeIcon,
-              color:
-                  isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280)),
-          iconSize: 22,
-          onPressed: () => ref.read(themeProvider.notifier).toggle(),
-          tooltip: thMode == ThemeMode.dark ? l10n.lightMode : l10n.darkMode,
-        ),
-        // Language switcher
-        InkWell(
-          onTap: () => ref.read(languageProvider.notifier).toggle(),
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(lang == 'vi' ? '🇻🇳' : '🇺🇸',
-                    style: const TextStyle(fontSize: 14)),
-                const SizedBox(width: 2),
-                Text(
-                  lang == 'vi' ? 'VI' : 'EN',
-                  style: TextStyle(
+        // Notifications
+        Semantics(
+          label: 'Thông báo',
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: Icon(Icons.notifications_outlined,
                     color: isDark
                         ? const Color(0xFF9CA3AF)
-                        : const Color(0xFF6B7280),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                        : const Color(0xFF6B7280)),
+                iconSize: 22,
+                onPressed: () {},
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  width: 15,
+                  height: 15,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF6C47FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Text('2',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700)),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-        // Notifications
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            IconButton(
-              icon: Icon(Icons.notifications_outlined,
-                  color: isDark
-                      ? const Color(0xFF9CA3AF)
-                      : const Color(0xFF6B7280)),
-              iconSize: 22,
-              onPressed: () {},
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                width: 16,
-                height: 16,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF6C47FF),
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: Text('2',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ),
-          ],
-        ),
-        // User avatar
+        // Avatar → profile
         Padding(
           padding: const EdgeInsets.only(right: 12),
-          child: GestureDetector(
-            onTap: () => context.go('/hr/profile'),
-            child: _UserAvatar(
-              name: user?.name ?? 'HR',
-              avatarUrl: user?.avatarUrl,
-              size: 32,
+          child: Tooltip(
+            message: 'Hồ sơ',
+            child: GestureDetector(
+              onTap: () => context.go('/hr/profile'),
+              child: _UserAvatar(
+                name: user?.name ?? 'HR',
+                avatarUrl: user?.avatarUrl,
+                size: 32,
+              ),
             ),
           ),
         ),
@@ -248,6 +210,11 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
             route: '/hr/history',
             icon: Icons.history_rounded,
             badge: '7'),
+        const _NavItem(
+            label: 'Ứng viên đề xuất',
+            route: '/hr/recommendations',
+            icon: Icons.people_alt_rounded,
+            badge: null),
         _NavItem(
             label: l10n.knowledgeBase,
             route: '/hr/knowledge',
@@ -505,6 +472,37 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
                       ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                // Theme + Language toggles
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DrawerToggleBtn(
+                        icon: ref.watch(themeProvider) == ThemeMode.dark
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
+                        label: ref.watch(themeProvider) == ThemeMode.dark
+                            ? 'Sáng'
+                            : 'Tối',
+                        isDark: isDark,
+                        onTap: () =>
+                            ref.read(themeProvider.notifier).toggle(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _DrawerToggleBtn(
+                        icon: Icons.language_rounded,
+                        label: ref.watch(languageProvider) == 'vi'
+                            ? 'English'
+                            : 'Tiếng Việt',
+                        isDark: isDark,
+                        onTap: () =>
+                            ref.read(languageProvider.notifier).toggle(),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
@@ -671,7 +669,59 @@ class _Badge extends StatelessWidget {
       );
 }
 
-// ── HR Bottom Bar (notched BottomAppBar) ─────────────────────────────────────
+// ── Drawer toggle button ──────────────────────────────────────────────────────
+
+class _DrawerToggleBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isDark;
+  final VoidCallback onTap;
+  const _DrawerToggleBtn({
+    required this.icon,
+    required this.label,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xFF1E2640)
+                : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isDark
+                  ? const Color(0xFF2D3562)
+                  : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 14,
+                  color: isDark
+                      ? const Color(0xFF9CA3AF)
+                      : const Color(0xFF6B7280)),
+              const SizedBox(width: 5),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? const Color(0xFF9CA3AF)
+                          : const Color(0xFF6B7280),
+                      fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ),
+      );
+}
+
+// ── HR Bottom Bar (clean 4-tab) ───────────────────────────────────────────────
 
 class _HRBottomBar extends StatelessWidget {
   final String currentLocation;
@@ -696,54 +746,61 @@ class _HRBottomBar extends StatelessWidget {
     final l10n  = context.l10n;
     final barBg = isDark ? const Color(0xFF0B1020) : Colors.white;
 
-    return BottomAppBar(
-      color:       barBg,
-      elevation:   8,
-      notchMargin: 8,
-      shape:       const CircularNotchedRectangle(),
-      height:      64,
-      padding:     EdgeInsets.zero,
-      child: Row(
-        children: [
-          Expanded(
-            child: BNItem(
-              icon:   Icons.home_rounded,
-              label:  l10n.dashboard,
-              active: _active('/hr/dashboard'),
-              isDark: isDark,
-              onTap:  () => navigationShell.goBranch(0),
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 64,
+        decoration: BoxDecoration(
+          color: barBg,
+          border: Border(
+            top: BorderSide(
+              color: isDark
+                  ? const Color(0xFF1E2640)
+                  : const Color(0xFFE5E7EB),
+              width: 1,
             ),
           ),
-          Expanded(
-            child: BNItem(
-              icon:   Icons.history_rounded,
-              label:  l10n.history,
-              active: _active('/hr/history'),
-              isDark: isDark,
-              onTap:  () => navigationShell.goBranch(1),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: BNItem(
+                icon:   Icons.home_rounded,
+                label:  l10n.dashboard,
+                active: _active('/hr/dashboard'),
+                isDark: isDark,
+                onTap:  () => navigationShell.goBranch(0),
+              ),
             ),
-          ),
-          // Gap for the FAB notch — no label
-          const SizedBox(width: 72),
-          Expanded(
-            child: BNItem(
-              icon:   Icons.menu_book_rounded,
-              label:  l10n.knowledgeBase,
-              active: _active('/hr/knowledge'),
-              isDark: isDark,
-              onTap:  () => navigationShell.goBranch(2),
+            Expanded(
+              child: BNItem(
+                icon:   Icons.history_rounded,
+                label:  l10n.history,
+                active: _active('/hr/history'),
+                isDark: isDark,
+                onTap:  () => navigationShell.goBranch(1),
+              ),
             ),
-          ),
-          Expanded(
-            child: BNItem(
-              icon:   Icons.account_circle_rounded,
-              label:  l10n.profile,
-              active: _active('/hr/profile'),
-              isDark: isDark,
-              onTap:  () => navigationShell.goBranch(3),
+            Expanded(
+              child: BNItem(
+                icon:   Icons.menu_book_rounded,
+                label:  l10n.knowledgeBase,
+                active: _active('/hr/knowledge'),
+                isDark: isDark,
+                onTap:  () => navigationShell.goBranch(2),
+              ),
             ),
-          ),
-        ],
+            Expanded(
+              child: BNItem(
+                icon:   Icons.account_circle_rounded,
+                label:  l10n.profile,
+                active: _active('/hr/profile'),
+                isDark: isDark,
+                onTap:  () => navigationShell.goBranch(3),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -35,7 +35,6 @@ class AuthInputField extends StatefulWidget {
 class _AuthInputFieldState extends State<AuthInputField>
     with SingleTickerProviderStateMixin {
   final _focus = FocusNode();
-  bool _focused = false;
   late AnimationController _shakeCtrl;
   bool _shaking = false;
 
@@ -50,7 +49,6 @@ class _AuthInputFieldState extends State<AuthInputField>
   }
 
   void _onFocus() {
-    setState(() => _focused = _focus.hasFocus);
     widget.onFocusChanged?.call(_focus.hasFocus);
   }
 
@@ -85,11 +83,9 @@ class _AuthInputFieldState extends State<AuthInputField>
 
     final borderColor = hasError
         ? AppColors.error
-        : _focused
-            ? AppColors.brandPurple
-            : isDark
-                ? const Color(0xFF374151)
-                : const Color(0xFFE5E7EB);
+        : isDark
+            ? const Color(0xFF374151)
+            : const Color(0xFFE5E7EB);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,9 +125,7 @@ class _AuthInputFieldState extends State<AuthInputField>
               AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
                 child: Icon(widget.icon, size: 17,
-                  color: _focused
-                      ? (hasError ? AppColors.error : AppColors.brandPurple)
-                      : AppColors.gray400),
+                  color: hasError ? AppColors.error : AppColors.gray400),
               ),
               const SizedBox(width: 10),
               Expanded(
