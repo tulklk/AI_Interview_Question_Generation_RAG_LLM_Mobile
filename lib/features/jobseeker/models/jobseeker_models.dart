@@ -140,18 +140,13 @@ class QuestionSet {
             .toList()
         : <PracticeQuestion>[];
 
-    final logoRaw = j['companyLogo'] ?? j['logoUrl'] ?? j['logo'];
-    final companyLogo = logoRaw is String && logoRaw.startsWith('http')
-        ? logoRaw
-        : null;
-
     return QuestionSet(
       id:               (j['id'] ?? j['questionSetId'] ?? j['setId'] ?? '').toString(),
       title:            (j['title'] ?? j['name'] ?? j['setTitle'] ?? '').toString(),
       company:          company.isEmpty ? 'Unknown' : company,
       companyInitials:  companyInitials,
       companyColor:     companyColor,
-      companyLogo:      companyLogo,
+      companyLogo:      _extractLogoUrl(j),
       difficulty:       difficulty,
       skills:           skills,
       totalQuestions:   totalQuestions,

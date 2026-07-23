@@ -37,7 +37,7 @@ class BNItem extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 9,
               color: color,
               fontWeight: active ? FontWeight.w700 : FontWeight.w400,
             ),

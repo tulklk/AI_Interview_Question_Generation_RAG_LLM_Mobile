@@ -442,27 +442,36 @@ class _SessionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Company avatar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(11),
-            child: session.companyLogo != null
-                ? Image.network(
-                    session.companyLogo!,
-                    width: 44,
-                    height: 44,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _CompanyAvatar(
-                      color: session.companyColor,
-                      initials: session.companyInitials,
-                      size: 44,
-                      fontSize: 16,
-                    ),
-                  )
-                : _CompanyAvatar(
-                    color: session.companyColor,
-                    initials: session.companyInitials,
-                    size: 44,
-                    fontSize: 16,
-                  ),
+          Consumer(
+            builder: (context, ref, _) {
+              final logoUrl = session.companyLogo ??
+                  ref.watch(setDetailProvider(session.setId)).maybeWhen(
+                        data: (qs) => qs?.companyLogo,
+                        orElse: () => null,
+                      );
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(11),
+                child: logoUrl != null
+                    ? Image.network(
+                        logoUrl,
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _CompanyAvatar(
+                          color: session.companyColor,
+                          initials: session.companyInitials,
+                          size: 44,
+                          fontSize: 16,
+                        ),
+                      )
+                    : _CompanyAvatar(
+                        color: session.companyColor,
+                        initials: session.companyInitials,
+                        size: 44,
+                        fontSize: 16,
+                      ),
+              );
+            },
           ),
           const SizedBox(width: 12),
 

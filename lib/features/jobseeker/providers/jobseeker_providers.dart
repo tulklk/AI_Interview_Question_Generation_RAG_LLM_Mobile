@@ -1010,6 +1010,136 @@ final filteredSetsProvider = Provider<List<QuestionSet>>((ref) {
   return ref.watch(marketplaceApiProvider).sets;
 });
 
+// ── Practice Streak ───────────────────────────────────────────────────────────
+
+/// Derived streak (consecutive practice days ending today or yesterday).
+/// Returns 0 while history is still loading or on error.
+final practiceStreakProvider = Provider<int>((ref) {
+  return ref.watch(practiceHistoryProvider).maybeWhen(
+    data: _computeStreak,
+    orElse: () => 0,
+  );
+});
+
+int _computeStreak(List<PracticeSession> sessions) {
+  if (sessions.isEmpty) return 0;
+  const monthNames = [
+    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec',
+  ];
+  final days = <DateTime>{};
+  for (final s in sessions) {
+    // date format: "May 12, 2026"
+    final parts = s.date.split(' ');
+    if (parts.length < 3) continue;
+    final mi = monthNames.indexOf(parts[0]);
+    if (mi < 0) continue;
+    try {
+      final d = int.parse(parts[1].replaceAll(',', ''));
+      final y = int.parse(parts[2]);
+      days.add(DateTime(y, mi + 1, d));
+    } catch (_) {}
+  }
+  if (days.isEmpty) return 0;
+
+  final sorted = days.toList()..sort((a, b) => b.compareTo(a));
+  final now = DateTime.now();
+  final todayN = DateTime(now.year, now.month, now.day);
+  // Streak must include today or yesterday
+  if (todayN.difference(sorted.first).inDays > 1) return 0;
+
+  int streak = 1;
+  for (int i = 1; i < sorted.length; i++) {
+    if (sorted[i - 1].difference(sorted[i]).inDays == 1) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+// ── Practice Consistency (heatmap stats) ─────────────────────────────────────
+
+class PracticeConsistencyStats {
+  final int currentStreak;
+  final int longestStreak;
+  final int activeDays;
+  final Map<DateTime, int> activityByDay;
+
+  const PracticeConsistencyStats({
+    required this.currentStreak,
+    required this.longestStreak,
+    required this.activeDays,
+    required this.activityByDay,
+  });
+
+  static const empty = PracticeConsistencyStats(
+    currentStreak: 0,
+    longestStreak: 0,
+    activeDays: 0,
+    activityByDay: {},
+  );
+}
+
+final practiceConsistencyProvider = Provider<PracticeConsistencyStats>((ref) {
+  return ref.watch(practiceHistoryProvider).maybeWhen(
+    data: _buildConsistency,
+    orElse: () => PracticeConsistencyStats.empty,
+  );
+});
+
+PracticeConsistencyStats _buildConsistency(List<PracticeSession> sessions) {
+  const monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  final activityByDay = <DateTime, int>{};
+  for (final s in sessions) {
+    final parts = s.date.split(' ');
+    if (parts.length < 3) continue;
+    final mi = monthNames.indexOf(parts[0]);
+    if (mi < 0) continue;
+    try {
+      final d = int.parse(parts[1].replaceAll(',', ''));
+      final y = int.parse(parts[2]);
+      final date = DateTime(y, mi + 1, d);
+      activityByDay[date] = (activityByDay[date] ?? 0) + 1;
+    } catch (_) {}
+  }
+
+  if (activityByDay.isEmpty) return PracticeConsistencyStats.empty;
+
+  final currentStreak = _computeStreak(sessions);
+
+  // Longest streak from all-time history
+  final sortedDays = activityByDay.keys.toList()..sort();
+  int longestStreak = 0;
+  int tempStreak = 0;
+  DateTime? prev;
+  for (final day in sortedDays) {
+    if (prev != null && day.difference(prev).inDays == 1) {
+      tempStreak++;
+    } else {
+      tempStreak = 1;
+    }
+    if (tempStreak > longestStreak) longestStreak = tempStreak;
+    prev = day;
+  }
+
+  // Active days within the last 20 weeks (140 days)
+  final cutoff = DateTime.now().subtract(const Duration(days: 140));
+  final activeDays =
+      activityByDay.keys.where((d) => !d.isBefore(cutoff)).length;
+
+  return PracticeConsistencyStats(
+    currentStreak: currentStreak,
+    longestStreak: longestStreak,
+    activeDays: activeDays,
+    activityByDay: activityByDay,
+  );
+}
+
 // ── Set Detail API ────────────────────────────────────────────────────────────
 
 /// Returns null for 404, throws for other errors.

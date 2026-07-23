@@ -392,7 +392,7 @@ class _DetailBody extends StatelessWidget {
 
 // ── Left Column ───────────────────────────────────────────────────────────────
 
-class _LeftColumn extends ConsumerWidget {
+class _LeftColumn extends ConsumerStatefulWidget {
   final QuestionSet set;
   final bool isDark;
   final AppLocalizations l10n;
@@ -401,7 +401,24 @@ class _LeftColumn extends ConsumerWidget {
       {required this.set, required this.isDark, required this.l10n});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LeftColumn> createState() => _LeftColumnState();
+}
+
+class _LeftColumnState extends ConsumerState<_LeftColumn> {
+  static const _maxVisibleSkills = 6;
+  bool _showAllSkills = false;
+
+  QuestionSet get set => widget.set;
+  bool get isDark => widget.isDark;
+  AppLocalizations get l10n => widget.l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleSkills = _showAllSkills || set.skills.length <= _maxVisibleSkills
+        ? set.skills
+        : set.skills.take(_maxVisibleSkills).toList();
+    final hiddenCount = set.skills.length - _maxVisibleSkills;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -409,23 +426,27 @@ class _LeftColumn extends ConsumerWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: set.companyColor,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Center(
-                child: Text(
-                  set.companyInitials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: set.companyLogo != null
+                  ? Image.network(
+                      set.companyLogo!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _CompanyInitials(
+                        color: set.companyColor,
+                        initials: set.companyInitials,
+                        size: 56,
+                        fontSize: 20,
+                      ),
+                    )
+                  : _CompanyInitials(
+                      color: set.companyColor,
+                      initials: set.companyInitials,
+                      size: 56,
+                      fontSize: 20,
+                    ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -442,13 +463,42 @@ class _LeftColumn extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${l10n.by} ${set.company}',
-                    style: TextStyle(
-                      color: isDark
-                          ? const Color(0xFF6B7280)
-                          : const Color(0xFF9CA3AF),
-                      fontSize: 13,
+                  GestureDetector(
+                    onTap: set.companyId != null && set.companyId!.isNotEmpty
+                        ? () => _showCompanyDialog(
+                              context, ref, set.companyId!, set, isDark)
+                        : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${l10n.by} ${set.company}',
+                          style: TextStyle(
+                            color: set.companyId != null &&
+                                    set.companyId!.isNotEmpty
+                                ? const Color(0xFF6C47FF)
+                                : (isDark
+                                    ? const Color(0xFF6B7280)
+                                    : const Color(0xFF9CA3AF)),
+                            fontSize: 13,
+                            decoration:
+                                set.companyId != null &&
+                                        set.companyId!.isNotEmpty
+                                    ? TextDecoration.underline
+                                    : null,
+                            decorationColor: const Color(0xFF6C47FF),
+                          ),
+                        ),
+                        if (set.companyId != null &&
+                            set.companyId!.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 13,
+                            color: Color(0xFF6C47FF),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -520,18 +570,35 @@ class _LeftColumn extends ConsumerWidget {
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children:
-                set.skills.map((s) => _SkillTag(label: s, isDark: isDark)).toList(),
+            children: [
+              ...visibleSkills.map((s) => _SkillTag(label: s, isDark: isDark)),
+              if (!_showAllSkills && hiddenCount > 0)
+                GestureDetector(
+                  onTap: () => setState(() => _showAllSkills = true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2D3562) : const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF3D4A7A) : const Color(0xFFE5E7EB),
+                      ),
+                    ),
+                    child: Text(
+                      '+$hiddenCount more',
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
 
         const SizedBox(height: 24),
-
-        // Company profile block (Story 2)
-        if (set.companyId != null && set.companyId!.isNotEmpty) ...[
-          _CompanyInfoBlock(companyId: set.companyId!, isDark: isDark),
-          const SizedBox(height: 24),
-        ],
 
         // Question Preview accordion
         Text(
@@ -584,9 +651,9 @@ class _EmptyQuestions extends StatelessWidget {
   }
 }
 
-// ── Question Preview Accordion ────────────────────────────────────────────────
+// ── Question Category Count Rows ──────────────────────────────────────────────
 
-class _QuestionPreviewAccordion extends StatefulWidget {
+class _QuestionPreviewAccordion extends StatelessWidget {
   final QuestionSet set;
   final bool isDark;
   final AppLocalizations l10n;
@@ -597,14 +664,11 @@ class _QuestionPreviewAccordion extends StatefulWidget {
     required this.l10n,
   });
 
-  @override
-  State<_QuestionPreviewAccordion> createState() =>
-      _QuestionPreviewAccordionState();
-}
-
-class _QuestionPreviewAccordionState
-    extends State<_QuestionPreviewAccordion> {
-  final Set<QuestionCategory> _expanded = {QuestionCategory.Technical};
+  static const _catColors = {
+    QuestionCategory.Technical:   Color(0xFF6C47FF),
+    QuestionCategory.Behavioral:  Color(0xFF10B981),
+    QuestionCategory.Situational: Color(0xFFF59E0B),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -614,223 +678,298 @@ class _QuestionPreviewAccordionState
       QuestionCategory.Situational,
     ];
 
-    return Column(
-      children: order.map((cat) {
-        final questions =
-            widget.set.questions.where((q) => q.category == cat).toList();
-        if (questions.isEmpty) return const SizedBox.shrink();
+    final rows = order
+        .map((cat) => (
+              cat: cat,
+              count: set.questions.where((q) => q.category == cat).length,
+            ))
+        .where((e) => e.count > 0)
+        .toList();
 
-        final isOpen = _expanded.contains(cat);
+    if (rows.isEmpty) return _EmptyQuestions(isDark: isDark);
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Container(
-            decoration: BoxDecoration(
-              color:
-                  widget.isDark ? const Color(0xFF1A1F35) : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: widget.isDark
-                    ? const Color(0xFF2D3562)
-                    : const Color(0xFFE5E7EB),
-              ),
-            ),
-            child: Column(
-              children: [
-                GestureDetector(
-                  onTap: () => setState(() {
-                    if (isOpen) {
-                      _expanded.remove(cat);
-                    } else {
-                      _expanded.add(cat);
-                    }
-                  }),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.l10n.nQuestionsInCategory(
-                                categoryLabel(cat), questions.length),
-                            style: TextStyle(
-                              color: widget.isDark
-                                  ? Colors.white
-                                  : const Color(0xFF111827),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Icon(
-                          isOpen
-                              ? Icons.expand_less_rounded
-                              : Icons.expand_more_rounded,
-                          color: widget.isDark
-                              ? const Color(0xFF6B7280)
-                              : const Color(0xFF9CA3AF),
-                          size: 20,
-                        ),
-                      ],
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: Column(
+        children: rows.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final e   = entry.value;
+          final dot = _catColors[e.cat] ?? const Color(0xFF6C47FF);
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
                     ),
-                  ),
-                ),
-                if (isOpen) ...[
-                  Divider(
-                    height: 1,
-                    color: widget.isDark
-                        ? const Color(0xFF2D3562)
-                        : const Color(0xFFE5E7EB),
-                  ),
-                  ...questions.asMap().entries.map((e) {
-                    final q = e.value;
-                    final idx = e.key;
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF6C47FF)
-                                      .withValues(alpha: 0.12),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${idx + 1}',
-                                    style: const TextStyle(
-                                      color: Color(0xFF6C47FF),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  q.text,
-                                  style: TextStyle(
-                                    color: widget.isDark
-                                        ? const Color(0xFFE5E7EB)
-                                        : const Color(0xFF374151),
-                                    fontSize: 13,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              _DifficultyPill(difficulty: q.difficulty),
-                            ],
-                          ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        categoryLabel(e.cat),
+                        style: TextStyle(
+                          color: isDark ? const Color(0xFFE5E7EB) : const Color(0xFF374151),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
-                        if (idx < questions.length - 1)
-                          Divider(
-                            height: 1,
-                            indent: 16,
-                            endIndent: 16,
-                            color: widget.isDark
-                                ? const Color(0xFF2D3562)
-                                : const Color(0xFFF3F4F6),
-                          ),
-                      ],
-                    );
-                  }),
-                ],
-              ],
-            ),
-          ),
-        );
-      }).toList(),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: dot.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${e.count} câu hỏi',
+                        style: TextStyle(
+                          color: dot,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (idx < rows.length - 1)
+                Divider(
+                  height: 1,
+                  indent: 16,
+                  endIndent: 16,
+                  color: isDark ? const Color(0xFF2D3562) : const Color(0xFFF3F4F6),
+                ),
+            ],
+          );
+        }).toList(),
+      ),
     );
   }
 }
 
-// ── Company Info Block ────────────────────────────────────────────────────────
+// ── Company Dialog ────────────────────────────────────────────────────────────
 
-class _CompanyInfoBlock extends ConsumerWidget {
+void _showCompanyDialog(
+  BuildContext context,
+  WidgetRef ref,
+  String companyId,
+  QuestionSet set,
+  bool isDark,
+) {
+  showDialog(
+    context: context,
+    builder: (_) => _CompanyDialog(
+      companyId: companyId,
+      set: set,
+      isDark: isDark,
+    ),
+  );
+}
+
+class _CompanyDialog extends ConsumerWidget {
   final String companyId;
+  final QuestionSet set;
   final bool isDark;
 
-  const _CompanyInfoBlock({required this.companyId, required this.isDark});
+  const _CompanyDialog({
+    required this.companyId,
+    required this.set,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(companyDetailProvider(companyId));
+    final bg = isDark ? const Color(0xFF1A1F35) : Colors.white;
+    final textPrimary = isDark ? Colors.white : const Color(0xFF111827);
+    final textSub =
+        isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final dividerColor =
+        isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
 
-    return async.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (info) {
-        if (info == null) return const SizedBox.shrink();
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1A1F35) : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
-            ),
+    final Widget content = async.when(
+      loading: () => const SizedBox(
+        height: 120,
+        child: Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF6C47FF),
+            strokeWidth: 2,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'About ${info.name}',
-                style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF111827),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
+        ),
+      ),
+      error: (_, __) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Text(
+            'Không thể tải thông tin công ty.',
+            style: TextStyle(color: textSub, fontSize: 13),
+          ),
+        ),
+      ),
+      data: (info) {
+        if (info == null) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                'Không có thông tin công ty.',
+                style: TextStyle(color: textSub, fontSize: 13),
               ),
-              if (info.description != null && info.description!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  info.description!,
-                  style: TextStyle(
-                    color: isDark
-                        ? const Color(0xFF9CA3AF)
-                        : const Color(0xFF6B7280),
-                    fontSize: 13,
-                    height: 1.6,
+            ),
+          );
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Logo + name row
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: set.companyLogo != null
+                      ? Image.network(
+                          set.companyLogo!,
+                          width: 44,
+                          height: 44,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _CompanyInitials(
+                            color: set.companyColor,
+                            initials: set.companyInitials,
+                            size: 44,
+                            fontSize: 16,
+                          ),
+                        )
+                      : _CompanyInitials(
+                          color: set.companyColor,
+                          initials: set.companyInitials,
+                          size: 44,
+                          fontSize: 16,
+                        ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    info.name,
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
-              const SizedBox(height: 10),
+            ),
+
+            if (info.description != null &&
+                info.description!.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(
+                info.description!,
+                style: TextStyle(
+                  color: textSub,
+                  fontSize: 13,
+                  height: 1.6,
+                ),
+              ),
+            ],
+
+            if (info.industry != null ||
+                info.size != null ||
+                info.location != null) ...[
+              const SizedBox(height: 14),
+              Divider(height: 1, color: dividerColor),
+              const SizedBox(height: 14),
               Wrap(
                 spacing: 16,
-                runSpacing: 6,
+                runSpacing: 8,
                 children: [
                   if (info.industry != null)
                     _InfoChip(
-                        icon: Icons.business_rounded,
-                        label: info.industry!,
-                        isDark: isDark),
+                      icon: Icons.business_rounded,
+                      label: info.industry!,
+                      isDark: isDark,
+                    ),
                   if (info.size != null)
                     _InfoChip(
-                        icon: Icons.people_rounded,
-                        label: info.size!,
-                        isDark: isDark),
+                      icon: Icons.people_rounded,
+                      label: info.size!,
+                      isDark: isDark,
+                    ),
                   if (info.location != null)
                     _InfoChip(
-                        icon: Icons.location_on_rounded,
-                        label: info.location!,
-                        isDark: isDark),
+                      icon: Icons.location_on_rounded,
+                      label: info.location!,
+                      isDark: isDark,
+                    ),
                 ],
               ),
             ],
-          ),
+          ],
         );
       },
+    );
+
+    return Dialog(
+      backgroundColor: bg,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              children: [
+                Text(
+                  'Thông tin công ty',
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 20,
+                    color: textSub,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            content,
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF6C47FF),
+                ),
+                child: const Text('Đóng'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -948,9 +1087,25 @@ class _OverviewCard extends StatelessWidget {
             Wrap(
               spacing: 6,
               runSpacing: 5,
-              children: set.skills
-                  .map((s) => _SkillTag(label: s, isDark: isDark))
-                  .toList(),
+              children: [
+                ...set.skills.take(4).map((s) => _SkillTag(label: s, isDark: isDark)),
+                if (set.skills.length > 4)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2D3562) : const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '+${set.skills.length - 4}',
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
           const SizedBox(height: 16),
@@ -1088,6 +1243,39 @@ class _SkillTag extends StatelessWidget {
           color: isDark ? const Color(0xFFA78BFA) : const Color(0xFF6C47FF),
           fontSize: 12,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _CompanyInitials extends StatelessWidget {
+  final Color color;
+  final String initials;
+  final double size;
+  final double fontSize;
+
+  const _CompanyInitials({
+    required this.color,
+    required this.initials,
+    required this.size,
+    required this.fontSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      color: color,
+      child: Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

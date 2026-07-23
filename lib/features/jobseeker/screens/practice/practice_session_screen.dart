@@ -528,13 +528,133 @@ class _QuestionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Text(
-            question.text,
+          _QuestionText(text: question.text, colors: colors),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Question text with code-block rendering ───────────────────────────────────
+
+class _TextSegment {
+  final bool isCode;
+  final String content;
+  final String? lang;
+  const _TextSegment({required this.isCode, required this.content, this.lang});
+}
+
+List<_TextSegment> _parseQuestionText(String text) {
+  final result = <_TextSegment>[];
+  final re = RegExp(r'```(\w+)?\n?([\s\S]*?)```', multiLine: true);
+  int lastEnd = 0;
+  for (final match in re.allMatches(text)) {
+    if (match.start > lastEnd) {
+      result.add(_TextSegment(isCode: false, content: text.substring(lastEnd, match.start)));
+    }
+    result.add(_TextSegment(
+      isCode: true,
+      lang: match.group(1),
+      content: (match.group(2) ?? '').trimRight(),
+    ));
+    lastEnd = match.end;
+  }
+  if (lastEnd < text.length) {
+    result.add(_TextSegment(isCode: false, content: text.substring(lastEnd)));
+  }
+  return result.isEmpty ? [_TextSegment(isCode: false, content: text)] : result;
+}
+
+class _QuestionText extends StatelessWidget {
+  final String text;
+  final _PracticeColors colors;
+  const _QuestionText({required this.text, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    final segments = _parseQuestionText(text);
+    final isDark = colors.bg == const Color(0xFF080B14);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: segments.map((seg) {
+        if (seg.isCode) {
+          return _CodeBlock(code: seg.content, lang: seg.lang, isDark: isDark, colors: colors);
+        }
+        final trimmed = seg.content.trim();
+        if (trimmed.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            trimmed,
             style: TextStyle(
               color: colors.primaryText,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              height: 1.5,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              height: 1.55,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _CodeBlock extends StatelessWidget {
+  final String code;
+  final String? lang;
+  final bool isDark;
+  final _PracticeColors colors;
+  const _CodeBlock({required this.code, this.lang, required this.isDark, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0A0E1A) : const Color(0xFF1E1E2E),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? const Color(0xFF2D3562) : const Color(0xFF374151),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (lang != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1A1F35) : const Color(0xFF2D3748),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  topRight: Radius.circular(10),
+                ),
+              ),
+              child: Text(
+                lang!,
+                style: const TextStyle(
+                  color: Color(0xFF9CA3AF),
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(14),
+            child: Text(
+              code,
+              style: const TextStyle(
+                color: Color(0xFFE5E7EB),
+                fontSize: 13,
+                fontFamily: 'monospace',
+                height: 1.65,
+                letterSpacing: 0.2,
+              ),
             ),
           ),
         ],
@@ -759,7 +879,7 @@ class _SubmittedWidget extends StatelessWidget {
   }
 }
 
-// ── Dot navigator ─────────────────────────────────────────────────────────────
+// ── Question grid navigator ───────────────────────────────────────────────────
 
 class _DotNavigator extends StatelessWidget {
   final List<PracticeQuestion> questions;
@@ -776,52 +896,118 @@ class _DotNavigator extends StatelessWidget {
     required this.colors,
   });
 
+  static const _cellSize   = 36.0;
+  static const _cellGap    = 6.0;
+
   @override
   Widget build(BuildContext context) {
+    final doneCount    = submitted.values.where((v) => v).length;
+    final pendingCount = questions.length - doneCount;
+
     return Container(
-      height: 32,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          children: questions.asMap().entries.map((e) {
-            final i = e.key;
-            final q = e.value;
-            final isCurrent = i == currentIndex;
-            final isDone    = submitted[q.id] == true;
+      decoration: BoxDecoration(
+        color: colors.card,
+        border: Border(top: BorderSide(color: colors.divider)),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Legend row
+          Row(
+            children: [
+              _LegendDot(color: _kPrimary,                   label: 'Đang làm'),
+              const SizedBox(width: 12),
+              _LegendDot(color: const Color(0xFF10B981),     label: 'Đã làm ($doneCount)'),
+              const SizedBox(width: 12),
+              _LegendDot(color: colors.dotInactive,          label: 'Chưa làm ($pendingCount)'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Grid
+          Wrap(
+            spacing: _cellGap,
+            runSpacing: _cellGap,
+            children: questions.asMap().entries.map((e) {
+              final i         = e.key;
+              final q         = e.value;
+              final isCurrent = i == currentIndex;
+              final isDone    = submitted[q.id] == true;
 
-            final Color color;
-            final double width;
-            if (isCurrent) {
-              color = _kPrimary;
-              width = 32;
-            } else if (isDone) {
-              color = const Color(0xFF10B981);
-              width = 10;
-            } else {
-              color = colors.dotInactive;
-              width = 10;
-            }
+              final Color bgColor;
+              final Color textColor;
+              final bool hasBorder;
 
-            return GestureDetector(
-              onTap: () => onTap(i),
-              child: Padding(
-                padding: const EdgeInsets.only(right: 6),
+              if (isCurrent) {
+                bgColor   = _kPrimary;
+                textColor = Colors.white;
+                hasBorder = false;
+              } else if (isDone) {
+                bgColor   = const Color(0xFF10B981).withValues(alpha: 0.15);
+                textColor = const Color(0xFF10B981);
+                hasBorder = false;
+              } else {
+                bgColor   = Colors.transparent;
+                textColor = colors.muted;
+                hasBorder = true;
+              }
+
+              return GestureDetector(
+                onTap: () => onTap(i),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: width,
-                  height: 10,
+                  duration: const Duration(milliseconds: 180),
+                  width: _cellSize,
+                  height: _cellSize,
                   decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(5),
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: hasBorder
+                        ? Border.all(color: colors.dotInactive, width: 1)
+                        : null,
+                  ),
+                  child: Center(
+                    child: isDone && !isCurrent
+                        ? Icon(Icons.check_rounded,
+                            size: 14, color: const Color(0xFF10B981))
+                        : Text(
+                            '${i + 1}',
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 11,
+                              fontWeight: isCurrent
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
-              ),
-            );
-          }).toList(),
-        ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8, height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF))),
+      ],
     );
   }
 }

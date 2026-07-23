@@ -245,6 +245,12 @@ class AppLocalizations {
   String get practiceNow       => isVi ? 'Luyện tập ngay'     : 'Practice Now';
   String get practiceHistory   => isVi ? 'Lịch sử luyện tập' : 'Practice History';
   String get myProfile         => isVi ? 'Hồ sơ của tôi'     : 'My Profile';
+
+  // Short labels for bottom nav bar (2 words max)
+  String get navDashboard      => isVi ? 'Tổng quan'  : 'Dashboard';
+  String get navPractice       => isVi ? 'Luyện tập'  : 'Practice';
+  String get navHistory        => isVi ? 'Lịch sử'    : 'History';
+  String get navProfile        => isVi ? 'Hồ sơ'      : 'Profile';
   String get readyToPractice   => isVi ? 'Sẵn sàng luyện tập?' : 'Ready to Practice?';
   String get readyToPracticeDesc =>
       isVi ? 'Chọn bộ câu hỏi và bắt đầu phỏng vấn thử'
@@ -300,7 +306,7 @@ class AppLocalizations {
   String get attemptsSuffix    => isVi ? ' lần thử'           : ' attempts';
 
   // ── Set Detail ────────────────────────────────────────────────────────────
-  String get backToSets        => isVi ? '← Quay lại bộ câu hỏi' : '← Back to Question Sets';
+  String get backToSets        => isVi ? 'Quay lại bộ câu hỏi' : 'Back to Question Sets';
   String get questionPreview   => isVi ? 'Xem trước câu hỏi' : 'Question Preview';
   String get skillsCovered     => isVi ? 'Kỹ năng bao gồm'   : 'Skills covered';
   String get sessionOverview   => isVi ? 'Tổng quan phiên'   : 'Session Overview';

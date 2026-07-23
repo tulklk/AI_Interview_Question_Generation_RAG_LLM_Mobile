@@ -206,11 +206,6 @@ class _JobseekerAppBar extends ConsumerWidget implements PreferredSizeWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  lang == 'vi' ? '🇻🇳' : '🇺🇸',
-                  style: const TextStyle(fontSize: 13),
-                ),
-                const SizedBox(width: 2),
-                Text(
                   lang == 'vi' ? 'VI' : 'EN',
                   style: TextStyle(
                     color: iconColor,
@@ -945,7 +940,7 @@ class _JobseekerBottomBar extends StatelessWidget {
           Expanded(
             child: BNItem(
               icon:   Icons.home_rounded,
-              label:  l10n.dashboard,
+              label:  l10n.navDashboard,
               active: _active('/jobseeker/dashboard'),
               isDark: isDark,
               onTap:  () => context.go('/jobseeker/dashboard'),
@@ -954,7 +949,7 @@ class _JobseekerBottomBar extends StatelessWidget {
           Expanded(
             child: BNItem(
               icon:   Icons.menu_book_rounded,
-              label:  l10n.practiceNow,
+              label:  l10n.navPractice,
               active: _browseActive,
               isDark: isDark,
               onTap:  () => context.go('/jobseeker'),
@@ -970,9 +965,9 @@ class _JobseekerBottomBar extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Text(
-                    l10n.practiceNow,
+                    l10n.navPractice,
                     style: const TextStyle(
-                      fontSize:   10,
+                      fontSize:   9,
                       color:      Color(0xFF6C47FF),
                       fontWeight: FontWeight.w700,
                     ),
@@ -987,7 +982,7 @@ class _JobseekerBottomBar extends StatelessWidget {
           Expanded(
             child: BNItem(
               icon:   Icons.history_rounded,
-              label:  l10n.practiceHistory,
+              label:  l10n.navHistory,
               active: _active('/jobseeker/history'),
               isDark: isDark,
               onTap:  () => context.go('/jobseeker/history'),
@@ -996,7 +991,7 @@ class _JobseekerBottomBar extends StatelessWidget {
           Expanded(
             child: BNItem(
               icon:   Icons.account_circle_rounded,
-              label:  l10n.myProfile,
+              label:  l10n.navProfile,
               active: _active('/jobseeker/profile'),
               isDark: isDark,
               onTap:  () => context.go('/jobseeker/profile'),

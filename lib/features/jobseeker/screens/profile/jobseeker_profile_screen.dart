@@ -263,7 +263,7 @@ class _JobseekerProfileScreenState
   }
 }
 
-// ── Left Panel (avatar + achievements) ───────────────────────────────────────
+// ── Left Panel (hero card + achievements) ────────────────────────────────────
 
 class _LeftPanel extends StatelessWidget {
   final CandidateProfileData data;
@@ -279,143 +279,326 @@ class _LeftPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cardBg = isDark ? const Color(0xFF1A1F35) : Colors.white;
-    final borderC =
-        isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
-    final earnedCount =
-        achievements.where((a) => a.earned).length;
+    final borderC = isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+    final earnedCount = achievements.where((a) => a.earned).length;
+    final initial = data.fullName.isNotEmpty
+        ? data.fullName[0].toUpperCase()
+        : 'U';
 
     return Column(
       children: [
-        // Avatar card
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderC),
-          ),
-          child: Column(
-            children: [
-              // Avatar ring
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF7C3AED), Color(0xFF6C47FF)],
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    (data.fullName ?? 'U').isNotEmpty
-                        ? (data.fullName ?? 'U')[0].toUpperCase()
-                        : 'U',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
+        // ── Hero gradient card ─────────────────────────────────────────────
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [const Color(0xFF2D1B69), const Color(0xFF1A1040)]
+                    : [const Color(0xFF7C3AED), const Color(0xFF4F46E5)],
+              ),
+            ),
+            child: Stack(
+              children: [
+                // Decorative background blobs
+                Positioned(
+                  top: -30, right: -30,
+                  child: Container(
+                    width: 140, height: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.06),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                data.fullName ?? l10n.notSet,
-                style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF111827),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                data.targetRole ?? l10n.notSet,
-                style: TextStyle(
-                  color: isDark
-                      ? const Color(0xFF6B7280)
-                      : const Color(0xFF9CA3AF),
-                  fontSize: 12,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              // Free plan badge
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.brandPurple.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(100),
-                  border: Border.all(
-                      color: AppColors.brandPurple.withValues(alpha: 0.35)),
-                ),
-                child: Text(
-                  l10n.freePlan,
-                  style: const TextStyle(
-                    color: AppColors.brandPurple,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                Positioned(
+                  bottom: -40, left: -20,
+                  child: Container(
+                    width: 120, height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.04),
+                    ),
                   ),
                 ),
-              ),
-            ],
+                Positioned(
+                  top: 60, right: 20,
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                ),
+                // Main content
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                  child: Column(
+                    children: [
+                      // Glowing avatar
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.9),
+                              Colors.white.withValues(alpha: 0.3),
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.25),
+                              blurRadius: 24,
+                              spreadRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Container(
+                          width: 80, height: 80,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF9B72FF), Color(0xFF6C47FF)],
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              initial,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                          .animate(onPlay: (c) => c.repeat(reverse: true))
+                          .scaleXY(begin: 1.0, end: 1.03, duration: 2400.ms, curve: Curves.easeInOut),
+
+                      const SizedBox(height: 16),
+                      Text(
+                        data.fullName.isNotEmpty ? data.fullName : l10n.notSet,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        data.targetRole?.isNotEmpty == true
+                            ? data.targetRole!
+                            : l10n.notSet,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 14),
+                      // Free plan badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(100),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.35)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.workspace_premium_rounded,
+                                size: 12, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              l10n.freePlan,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      // Stats row
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.15)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _HeroStat(
+                              value: '${data.techStack.length}',
+                              label: 'Kỹ năng',
+                            ),
+                            Container(
+                              width: 1, height: 28,
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                            _HeroStat(
+                              value: '$earnedCount',
+                              label: 'Thành tích',
+                            ),
+                            Container(
+                              width: 1, height: 28,
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                            _HeroStat(
+                              value: data.seniorityLevel?.isNotEmpty == true
+                                  ? data.seniorityLevel!.split('-').first
+                                  : '—',
+                              label: 'Cấp độ',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ).animate().fadeIn(duration: 500.ms).slideY(begin: -0.08, curve: Curves.easeOut),
 
         const SizedBox(height: 14),
 
-        // Achievements card
+        // ── Achievements card ──────────────────────────────────────────────
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: cardBg,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: borderC),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    l10n.achievements,
-                    style: TextStyle(
-                      color:
-                          isDark ? Colors.white : const Color(0xFF111827),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                  Container(
+                    width: 4, height: 18,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFF9B72FF), Color(0xFF6C47FF)],
+                      ),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  Text(
-                    l10n.earnedCount(
-                        earnedCount, achievements.length),
-                    style: TextStyle(
-                      color: isDark
-                          ? const Color(0xFF6B7280)
-                          : const Color(0xFF9CA3AF),
-                      fontSize: 11,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.achievements,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF111827),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandPurple.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    child: Text(
+                      '$earnedCount/${achievements.length} đạt',
+                      style: const TextStyle(
+                        color: AppColors.brandPurple,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               GridView.count(
                 crossAxisCount: 3,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                children: achievements.map((a) {
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.0,
+                children: achievements.asMap().entries.map((e) {
                   return _AchievementBadge(
-                      achievement: a, isDark: isDark);
+                    achievement: e.value,
+                    isDark: isDark,
+                  )
+                      .animate(delay: (e.key * 60).ms)
+                      .fadeIn(duration: 400.ms)
+                      .scaleXY(begin: 0.7, curve: Curves.easeOutBack);
                 }).toList(),
               ),
             ],
+          ),
+        ).animate().fadeIn(delay: 120.ms, duration: 500.ms).slideY(begin: 0.05),
+      ],
+    );
+  }
+}
+
+class _HeroStat extends StatelessWidget {
+  final String value;
+  final String label;
+  const _HeroStat({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.65),
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
@@ -426,46 +609,85 @@ class _LeftPanel extends StatelessWidget {
 class _AchievementBadge extends StatelessWidget {
   final Achievement achievement;
   final bool isDark;
-  const _AchievementBadge(
-      {required this.achievement, required this.isDark});
+  const _AchievementBadge({required this.achievement, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final locked = !achievement.earned;
+    final earned = achievement.earned;
     return Tooltip(
       message: '${achievement.title}\n${achievement.description}',
       child: Container(
         decoration: BoxDecoration(
-          color: locked
-              ? (isDark
-                  ? const Color(0xFF0D1117)
-                  : const Color(0xFFF9FAFB))
-              : AppColors.brandPurple.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
+          gradient: earned
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.brandPurple.withValues(alpha: isDark ? 0.3 : 0.15),
+                    AppColors.brandPurple.withValues(alpha: isDark ? 0.15 : 0.05),
+                  ],
+                )
+              : null,
+          color: earned
+              ? null
+              : (isDark ? const Color(0xFF0D1117) : const Color(0xFFF9FAFB)),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: locked
-                ? (isDark
-                    ? const Color(0xFF1E2640)
-                    : const Color(0xFFE5E7EB))
-                : AppColors.brandPurple.withValues(alpha: 0.3),
+            color: earned
+                ? AppColors.brandPurple.withValues(alpha: isDark ? 0.5 : 0.35)
+                : (isDark ? const Color(0xFF1E2640) : const Color(0xFFE5E7EB)),
+            width: earned ? 1.5 : 1,
           ),
+          boxShadow: earned
+              ? [
+                  BoxShadow(
+                    color: AppColors.brandPurple.withValues(alpha: 0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
         ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                achievement.icon,
-                style: TextStyle(
-                  fontSize: 20,
-                  color: locked ? null : null,
+        child: Stack(
+          children: [
+            Center(
+              child: Opacity(
+                opacity: earned ? 1.0 : 0.35,
+                child: Text(
+                  achievement.icon,
+                  style: const TextStyle(fontSize: 26),
                 ),
               ),
-              if (locked)
-                const Icon(Icons.lock_rounded,
-                    size: 8, color: Color(0xFF4A5578)),
-            ],
-          ),
+            ),
+            if (!earned)
+              Positioned(
+                bottom: 6, right: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF1E2640)
+                        : const Color(0xFFE5E7EB),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.lock_rounded,
+                      size: 9, color: Color(0xFF6B7280)),
+                ),
+              ),
+            if (earned)
+              Positioned(
+                bottom: 6, right: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF10B981),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.check_rounded,
+                      size: 8, color: Colors.white),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -934,7 +1156,7 @@ class _SeniorityRow extends StatelessWidget {
   }
 }
 
-class _SkillsEditor extends StatelessWidget {
+class _SkillsEditor extends StatefulWidget {
   final List<String> displaySkills;
   final bool editing;
   final bool isDark;
@@ -956,15 +1178,32 @@ class _SkillsEditor extends StatelessWidget {
   });
 
   @override
+  State<_SkillsEditor> createState() => _SkillsEditorState();
+}
+
+class _SkillsEditorState extends State<_SkillsEditor> {
+  static const _maxVisible = 8;
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final editing = widget.editing;
+    final skills = widget.displaySkills;
+
+    final visible = (editing || _expanded || skills.length <= _maxVisible)
+        ? skills
+        : skills.take(_maxVisible).toList();
+    final hiddenCount = skills.length - _maxVisible;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
           spacing: 8,
           runSpacing: 6,
-          children: displaySkills.map((s) {
-            return Chip(
+          children: [
+            ...visible.map((s) => Chip(
               label: Text(
                 s,
                 style: TextStyle(
@@ -976,14 +1215,47 @@ class _SkillsEditor extends StatelessWidget {
               backgroundColor: AppColors.brandPurple.withValues(alpha: isDark ? 0.15 : 0.08),
               side: BorderSide(
                   color: AppColors.brandPurple.withValues(alpha: isDark ? 0.35 : 0.25)),
-              deleteIcon: editing
-                  ? const Icon(Icons.close_rounded, size: 14)
-                  : null,
+              deleteIcon: editing ? const Icon(Icons.close_rounded, size: 14) : null,
               deleteIconColor: const Color(0xFF9CA3AF),
-              onDeleted: editing ? () => onRemove(s) : null,
+              onDeleted: editing ? () => widget.onRemove(s) : null,
               padding: const EdgeInsets.symmetric(horizontal: 6),
-            );
-          }).toList(),
+            )),
+            if (!editing && !_expanded && hiddenCount > 0)
+              GestureDetector(
+                onTap: () => setState(() => _expanded = true),
+                child: Chip(
+                  label: Text(
+                    '+$hiddenCount',
+                    style: TextStyle(
+                      color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  backgroundColor: isDark ? const Color(0xFF1E2640) : const Color(0xFFF3F4F6),
+                  side: BorderSide(
+                      color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB)),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                ),
+              ),
+            if (!editing && _expanded && skills.length > _maxVisible)
+              GestureDetector(
+                onTap: () => setState(() => _expanded = false),
+                child: Chip(
+                  label: Text(
+                    'Thu gọn',
+                    style: TextStyle(
+                      color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                      fontSize: 12,
+                    ),
+                  ),
+                  backgroundColor: isDark ? const Color(0xFF1E2640) : const Color(0xFFF3F4F6),
+                  side: BorderSide(
+                      color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB)),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                ),
+              ),
+          ],
         ),
         if (editing) ...[
           const SizedBox(height: 8),
@@ -991,14 +1263,14 @@ class _SkillsEditor extends StatelessWidget {
             children: [
               Expanded(
                 child: TextField(
-                  controller: ctrl,
-                  onSubmitted: onAdd,
+                  controller: widget.ctrl,
+                  onSubmitted: widget.onAdd,
                   style: TextStyle(
                     color: isDark ? Colors.white : const Color(0xFF111827),
                     fontSize: 13,
                   ),
                   decoration: InputDecoration(
-                    hintText: l10n.skillHint,
+                    hintText: widget.l10n.skillHint,
                     hintStyle: TextStyle(
                       color: isDark ? const Color(0xFF4A5578) : const Color(0xFF9CA3AF),
                       fontSize: 13,
@@ -1008,37 +1280,33 @@ class _SkillsEditor extends StatelessWidget {
                     isDense: true,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: borderC),
+                      borderSide: BorderSide(color: widget.borderC),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: borderC),
+                      borderSide: BorderSide(color: widget.borderC),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide:
-                          const BorderSide(color: AppColors.brandPurple),
+                      borderSide: const BorderSide(color: AppColors.brandPurple),
                     ),
                     filled: true,
-                    fillColor: isDark
-                        ? const Color(0xFF0D1117)
-                        : const Color(0xFFF9FAFB),
+                    fillColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF9FAFB),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: () => onAdd(ctrl.text),
+                onPressed: () => widget.onAdd(widget.ctrl.text),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brandPurple,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   elevation: 0,
                 ),
-                child: Text(l10n.addSkill, style: const TextStyle(fontSize: 13)),
+                child: Text(widget.l10n.addSkill, style: const TextStyle(fontSize: 13)),
               ),
             ],
           ),
@@ -1186,61 +1454,6 @@ class _CvSectionState extends ConsumerState<_CvSection> {
     }
   }
 
-  Future<void> _confirmDelete() async {
-    final l10n = widget.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor:
-            widget.isDark ? const Color(0xFF1A1F35) : Colors.white,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14)),
-        title: Text(
-          l10n.deleteCvTitle,
-          style: TextStyle(
-            color: widget.isDark ? Colors.white : const Color(0xFF111827),
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: Text(
-          l10n.deleteCvBody,
-          style: TextStyle(
-            color: widget.isDark
-                ? const Color(0xFF9CA3AF)
-                : const Color(0xFF6B7280),
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.cancel,
-                style: const TextStyle(color: Color(0xFF6B7280))),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(
-              l10n.deleteCv,
-              style: const TextStyle(
-                  color: Color(0xFFEF4444), fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-    final ok = await ref.read(cvProvider.notifier).delete();
-    if (!mounted) return;
-    if (ok) {
-      _toast(widget.l10n.cvDeleteSuccess);
-    } else {
-      final err = ref.read(cvProvider).error;
-      _toast(err ?? 'Xóa CV thất bại.', isError: true);
-    }
-  }
 
   void _toast(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context)
@@ -1313,9 +1526,6 @@ class _CvSectionState extends ConsumerState<_CvSection> {
               cv: cvState.cv!,
               isDark: isDark,
               l10n: l10n,
-              isDeleting: cvState.isDeleting,
-              onReplace: () => _pickAndUpload(replace: true),
-              onDelete: _confirmDelete,
             )
 
           // ── Empty state ───────────────────────────────────────────────────
@@ -1456,22 +1666,24 @@ class _CvEmptyState extends StatelessWidget {
 
 // ── Loaded CV card ────────────────────────────────────────────────────────────
 
-class _CvCard extends StatelessWidget {
+class _CvCard extends StatefulWidget {
   final CvData cv;
   final bool isDark;
   final AppLocalizations l10n;
-  final bool isDeleting;
-  final VoidCallback onReplace;
-  final VoidCallback onDelete;
 
   const _CvCard({
     required this.cv,
     required this.isDark,
     required this.l10n,
-    required this.isDeleting,
-    required this.onReplace,
-    required this.onDelete,
   });
+
+  @override
+  State<_CvCard> createState() => _CvCardState();
+}
+
+class _CvCardState extends State<_CvCard> {
+  static const _maxVisibleSkills = 8;
+  bool _showAllSkills = false;
 
   String _formatDate(String? iso) {
     if (iso == null) return '';
@@ -1489,17 +1701,21 @@ class _CvCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labelColor =
-        isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
-    final textColor =
-        isDark ? const Color(0xFFD1D5DB) : const Color(0xFF374151);
-    final borderC =
-        isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+    final cv = widget.cv;
+    final isDark = widget.isDark;
+    final l10n = widget.l10n;
+    final labelColor = isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
+    final textColor = isDark ? const Color(0xFFD1D5DB) : const Color(0xFF374151);
+    final borderC = isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
 
     final allSkills = [
       ...cv.skills,
-      ...cv.techStack.where((s) => !cv.skills.contains(s))
+      ...cv.techStack.where((s) => !cv.skills.contains(s)),
     ];
+    final visibleSkills = _showAllSkills || allSkills.length <= _maxVisibleSkills
+        ? allSkills
+        : allSkills.take(_maxVisibleSkills).toList();
+    final hiddenCount = allSkills.length - _maxVisibleSkills;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1516,9 +1732,7 @@ class _CvCard extends StatelessWidget {
             children: [
               Icon(Icons.picture_as_pdf_rounded,
                   size: 20,
-                  color: isDark
-                      ? const Color(0xFFA78BFA)
-                      : AppColors.brandPurple),
+                  color: isDark ? const Color(0xFFA78BFA) : AppColors.brandPurple),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -1562,9 +1776,19 @@ class _CvCard extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 5,
-            children: allSkills
-                .map((s) => _SkillChip(label: s, isDark: isDark))
-                .toList(),
+            children: [
+              ...visibleSkills.map((s) => _SkillChip(label: s, isDark: isDark)),
+              if (!_showAllSkills && hiddenCount > 0)
+                GestureDetector(
+                  onTap: () => setState(() => _showAllSkills = true),
+                  child: _SkillChip(label: '+$hiddenCount', isDark: isDark, muted: true),
+                ),
+              if (_showAllSkills && allSkills.length > _maxVisibleSkills)
+                GestureDetector(
+                  onTap: () => setState(() => _showAllSkills = false),
+                  child: _SkillChip(label: 'Thu gọn', isDark: isDark, muted: true),
+                ),
+            ],
           ),
         ],
 
@@ -1584,66 +1808,14 @@ class _CvCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.brandPurple.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                  color: AppColors.brandPurple.withValues(alpha: 0.2)),
+              border: Border.all(color: AppColors.brandPurple.withValues(alpha: 0.2)),
             ),
             child: Text(
               cv.summary!,
-              style: TextStyle(
-                  color: textColor, fontSize: 12, height: 1.6),
-              maxLines: 5,
-              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: textColor, fontSize: 12, height: 1.6),
             ),
           ),
         ],
-
-        const SizedBox(height: 14),
-
-        // Action buttons
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onReplace,
-                icon: const Icon(Icons.swap_horiz_rounded, size: 15),
-                label: Text(l10n.replaceCv),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.brandPurple,
-                  side: const BorderSide(color: AppColors.brandPurple),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  textStyle: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: isDeleting ? null : onDelete,
-                icon: isDeleting
-                    ? const SizedBox(
-                        width: 13,
-                        height: 13,
-                        child: CircularProgressIndicator(
-                            color: Color(0xFFEF4444), strokeWidth: 2),
-                      )
-                    : const Icon(Icons.delete_outline_rounded, size: 15),
-                label: Text(l10n.deleteCv),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFEF4444),
-                  side: const BorderSide(color: Color(0xFFEF4444)),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  textStyle: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }
@@ -1652,26 +1824,32 @@ class _CvCard extends StatelessWidget {
 class _SkillChip extends StatelessWidget {
   final String label;
   final bool isDark;
-  const _SkillChip({required this.label, required this.isDark});
+  final bool muted;
+  const _SkillChip({required this.label, required this.isDark, this.muted = false});
 
   @override
   Widget build(BuildContext context) {
+    final bgColor = muted
+        ? (isDark ? const Color(0xFF1E2640) : const Color(0xFFF3F4F6))
+        : AppColors.brandPurple.withValues(alpha: isDark ? 0.15 : 0.08);
+    final borderColor = muted
+        ? (isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB))
+        : AppColors.brandPurple.withValues(alpha: isDark ? 0.35 : 0.25);
+    final textColor = muted
+        ? (isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280))
+        : (isDark ? const Color(0xFFA78BFA) : AppColors.brandPurple);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.brandPurple
-            .withValues(alpha: isDark ? 0.15 : 0.08),
+        color: bgColor,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-            color: AppColors.brandPurple
-                .withValues(alpha: isDark ? 0.35 : 0.25)),
+        border: Border.all(color: borderColor),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: isDark
-              ? const Color(0xFFA78BFA)
-              : AppColors.brandPurple,
+          color: textColor,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
