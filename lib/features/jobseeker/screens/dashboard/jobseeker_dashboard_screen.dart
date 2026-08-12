@@ -1,5 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/glass_card.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,7 +26,7 @@ class JobseekerDashboardScreen extends ConsumerWidget {
     final isWide = screenW > 840;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF070A13) : const Color(0xFFF8FAFC),
+      backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
         child: Column(
@@ -38,8 +40,6 @@ class JobseekerDashboardScreen extends ConsumerWidget {
             ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.06, end: 0),
 
             const SizedBox(height: 16),
-
-            _InProgressSection(isDark: isDark).animate().fadeIn(delay: 60.ms),
 
             _KpiSection(isDark: isDark)
                 .animate()
@@ -63,6 +63,10 @@ class JobseekerDashboardScreen extends ConsumerWidget {
                 .fadeIn(delay: 180.ms, duration: 400.ms),
 
             const SizedBox(height: 24),
+
+            _InProgressSection(isDark: isDark)
+                .animate()
+                .fadeIn(delay: 195.ms),
 
             if (isWide)
               Row(
@@ -160,7 +164,7 @@ class _WelcomeHeader extends StatelessWidget {
         Text(
           '$greeting, $name 👋',
           style: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF111827),
+            color: AppColors.textPrimary(isDark),
             fontSize: 24,
             fontWeight: FontWeight.w800,
             height: 1.2,
@@ -192,6 +196,31 @@ class _KpiSection extends ConsumerWidget {
     final isVi = l10n.isVi;
     final stats = ref.watch(practiceStatsProvider).valueOrNull;
     final streak = ref.watch(practiceStreakProvider);
+    final history = ref.watch(practiceHistoryProvider).valueOrNull ?? const [];
+
+    // Oldest → newest, up to 7 sessions for sparklines
+    final recent = history.take(7).toList().reversed.toList();
+    final scoreSpots = recent.isEmpty
+        ? const [FlSpot(0, 0), FlSpot(1, 0)]
+        : [
+            for (var i = 0; i < recent.length; i++)
+              FlSpot(i.toDouble(), recent[i].score.toDouble()),
+          ];
+    final sessionSpots = recent.isEmpty
+        ? const [FlSpot(0, 0), FlSpot(1, 0)]
+        : [
+            for (var i = 0; i < recent.length; i++)
+              FlSpot(i.toDouble(), (i + 1).toDouble()),
+          ];
+    final streakSpots = streak <= 0
+        ? const [FlSpot(0, 0), FlSpot(1, 0)]
+        : [
+            for (var i = 0; i < 7; i++)
+              FlSpot(
+                i.toDouble(),
+                i < streak.clamp(0, 7) ? (i + 1).toDouble() : 0.35,
+              ),
+          ];
 
     String readiness;
     Color readinessColor;
@@ -219,34 +248,51 @@ class _KpiSection extends ConsumerWidget {
       _StatData(
         icon: Icons.menu_book_rounded,
         iconColor: Colors.blue,
-        value: stats != null ? '${stats.totalSessions}' : '—',
+        countValue: stats?.totalSessions,
+        valueSuffix: '',
+        staticValue: stats == null ? '—' : null,
         label: l10n.practiceSessions,
         trend: isVi ? 'Đã hoàn thành' : 'Completed',
+        sparkSpots: sessionSpots,
+        sparkKind: _SparkKind.area,
       ),
       _StatData(
         icon: Icons.gps_fixed_rounded,
         iconColor: const Color(0xFF6C47FF),
-        value: stats != null ? '${stats.avgScore}%' : '—',
+        countValue: stats?.avgScore,
+        valueSuffix: '%',
+        staticValue: stats == null ? '—' : null,
         label: l10n.averageScore,
         trend: stats != null
             ? (isVi
                 ? 'Tốt nhất: ${stats.bestScore}%'
                 : 'Best: ${stats.bestScore}%')
             : '—',
+        sparkSpots: scoreSpots,
+        sparkKind: _SparkKind.line,
       ),
       _StatData(
         icon: Icons.local_fire_department_rounded,
         iconColor: const Color(0xFFF59E0B),
-        value: streak > 0 ? '$streak${isVi ? ' ngày' : 'd'}' : '0',
+        countValue: streak,
+        valueSuffix: streak > 0 ? (isVi ? ' ngày' : 'd') : '',
+        staticValue: null,
         label: l10n.practiceStreak,
         trend: streakTrend,
+        sparkSpots: streakSpots,
+        sparkKind: _SparkKind.bars,
       ),
       _StatData(
         icon: Icons.trending_up_rounded,
         iconColor: readinessColor,
-        value: readiness,
+        countValue: null,
+        valueSuffix: '',
+        staticValue: readiness,
         label: l10n.interviewReadiness,
         trend: l10n.aiAssessed,
+        purpleAiTrend: true,
+        sparkSpots: scoreSpots,
+        sparkKind: _SparkKind.area,
       ),
     ];
 
@@ -254,17 +300,25 @@ class _KpiSection extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Expanded(child: _StatCard(data: cards[0], isDark: isDark)),
+            Expanded(
+              child: _StatCard(data: cards[0], isDark: isDark, index: 0),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(data: cards[1], isDark: isDark)),
+            Expanded(
+              child: _StatCard(data: cards[1], isDark: isDark, index: 1),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _StatCard(data: cards[2], isDark: isDark)),
+            Expanded(
+              child: _StatCard(data: cards[2], isDark: isDark, index: 2),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(data: cards[3], isDark: isDark)),
+            Expanded(
+              child: _StatCard(data: cards[3], isDark: isDark, index: 3),
+            ),
           ],
         ),
       ],
@@ -272,48 +326,56 @@ class _KpiSection extends ConsumerWidget {
   }
 }
 
+enum _SparkKind { line, area, bars }
+
 class _StatData {
   final IconData icon;
   final Color iconColor;
-  final String value;
+  final int? countValue;
+  final String valueSuffix;
+  final String? staticValue;
   final String label;
   final String trend;
+  final bool purpleAiTrend;
+  final List<FlSpot> sparkSpots;
+  final _SparkKind sparkKind;
 
   const _StatData({
     required this.icon,
     required this.iconColor,
-    required this.value,
+    required this.countValue,
+    required this.valueSuffix,
+    required this.staticValue,
     required this.label,
     required this.trend,
+    required this.sparkSpots,
+    required this.sparkKind,
+    this.purpleAiTrend = false,
   });
 }
 
 class _StatCard extends StatelessWidget {
   final _StatData data;
   final bool isDark;
+  final int index;
 
-  const _StatCard({required this.data, required this.isDark});
+  const _StatCard({
+    required this.data,
+    required this.isDark,
+    required this.index,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final muted =
+        isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
+    final trendMuted =
+        isDark ? const Color(0xFF4A5578) : const Color(0xFF9CA3AF);
+
+    return GlassCard(
+      isDark: isDark,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1F35) : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
-        ),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-      ),
+      borderRadius: 14,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -327,31 +389,218 @@ class _StatCard extends StatelessWidget {
             child: Icon(data.icon, color: data.iconColor, size: 18),
           ),
           const SizedBox(height: 10),
-          Text(
-            data.value,
-            style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF111827),
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
+          _AnimatedStatValue(
+            countValue: data.countValue,
+            suffix: data.valueSuffix,
+            staticValue: data.staticValue,
+            isDark: isDark,
           ),
           const SizedBox(height: 2),
           Text(
             data.label,
             style: TextStyle(
-              color: isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF),
+              color: muted,
               fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            data.trend,
+          if (data.purpleAiTrend)
+            _PurpleAiTrendText(text: data.trend, muted: trendMuted)
+          else
+            Text(
+              data.trend,
+              style: TextStyle(color: trendMuted, fontSize: 11),
+            ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 32,
+            width: double.infinity,
+            child: _MiniSparkline(
+              spots: data.sparkSpots,
+              color: data.iconColor,
+              kind: data.sparkKind,
+            )
+                .animate(delay: (80 + index * 70).ms)
+                .fadeIn(duration: 450.ms)
+                .slideX(begin: 0.08, curve: Curves.easeOutCubic),
+          ),
+        ],
+      ),
+    )
+        .animate(delay: (index * 60).ms)
+        .fadeIn(duration: 400.ms)
+        .slideY(begin: 0.05, curve: Curves.easeOut);
+  }
+}
+
+class _AnimatedStatValue extends StatelessWidget {
+  final int? countValue;
+  final String suffix;
+  final String? staticValue;
+  final bool isDark;
+
+  const _AnimatedStatValue({
+    required this.countValue,
+    required this.suffix,
+    required this.staticValue,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      color: AppColors.textPrimary(isDark),
+      fontSize: 20,
+      fontWeight: FontWeight.w800,
+    );
+
+    if (staticValue != null && countValue == null) {
+      return Text(staticValue!, style: style);
+    }
+
+    final target = countValue ?? 0;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: target.toDouble()),
+      duration: const Duration(milliseconds: 1000),
+      curve: Curves.easeOutCubic,
+      builder: (_, value, __) {
+        final n = value.round();
+        return Text('$n$suffix', style: style);
+      },
+    );
+  }
+}
+
+class _PurpleAiTrendText extends StatelessWidget {
+  final String text;
+  final Color muted;
+  const _PurpleAiTrendText({required this.text, required this.muted});
+
+  @override
+  Widget build(BuildContext context) {
+    // "AI đánh giá" / "AI assessed" → purple "AI" prefix
+    final aiPrefix = text.startsWith('AI') ? 'AI' : null;
+    final rest = aiPrefix != null ? text.substring(2) : text;
+
+    if (aiPrefix == null) {
+      return Text(text, style: TextStyle(color: muted, fontSize: 11));
+    }
+
+    return RichText(
+      text: TextSpan(
+        children: [
+          const TextSpan(
+            text: 'AI',
             style: TextStyle(
-              color: isDark ? const Color(0xFF4A5578) : const Color(0xFF9CA3AF),
+              color: AppColors.brandPurple,
               fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
           ),
+          TextSpan(
+            text: rest,
+            style: TextStyle(color: muted, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniSparkline extends StatelessWidget {
+  final List<FlSpot> spots;
+  final Color color;
+  final _SparkKind kind;
+
+  const _MiniSparkline({
+    required this.spots,
+    required this.color,
+    required this.kind,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (kind == _SparkKind.bars) {
+      return _MiniBarSpark(spots: spots, color: color);
+    }
+
+    final maxY = spots.map((s) => s.y).fold<double>(0, (a, b) => a > b ? a : b);
+    final minY = spots.map((s) => s.y).fold<double>(maxY, (a, b) => a < b ? a : b);
+    final pad = ((maxY - minY).abs() < 1 ? 8.0 : (maxY - minY) * 0.15);
+
+    return LineChart(
+      LineChartData(
+        minX: spots.first.x,
+        maxX: spots.last.x,
+        minY: (minY - pad).clamp(0, double.infinity),
+        maxY: maxY + pad,
+        titlesData: const FlTitlesData(show: false),
+        gridData: const FlGridData(show: false),
+        borderData: FlBorderData(show: false),
+        lineTouchData: const LineTouchData(enabled: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            curveSmoothness: 0.35,
+            color: color,
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: kind == _SparkKind.area
+                ? BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        color.withValues(alpha: 0.28),
+                        color.withValues(alpha: 0.02),
+                      ],
+                    ),
+                  )
+                : BarAreaData(show: false),
+          ),
+        ],
+      ),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+    );
+  }
+}
+
+class _MiniBarSpark extends StatelessWidget {
+  final List<FlSpot> spots;
+  final Color color;
+  const _MiniBarSpark({required this.spots, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxY = spots.map((s) => s.y).fold<double>(1, (a, b) => a > b ? a : b);
+
+    return BarChart(
+      BarChartData(
+        maxY: maxY * 1.15,
+        minY: 0,
+        titlesData: const FlTitlesData(show: false),
+        gridData: const FlGridData(show: false),
+        borderData: FlBorderData(show: false),
+        barTouchData: BarTouchData(enabled: false),
+        alignment: BarChartAlignment.spaceBetween,
+        barGroups: [
+          for (final s in spots)
+            BarChartGroupData(
+              x: s.x.toInt(),
+              barRods: [
+                BarChartRodData(
+                  toY: s.y,
+                  width: 4,
+                  borderRadius: BorderRadius.circular(2),
+                  color: color.withValues(alpha: s.y > 0.5 ? 0.9 : 0.25),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -387,13 +636,14 @@ class _TrendChartCard extends ConsumerWidget {
             sessions.length;
 
         final gridColor =
-            isDark ? const Color(0xFF1E2640) : const Color(0xFFF3F4F6);
+            AppColors.chipBg(isDark);
         final labelColor =
             isDark ? const Color(0xFF4A5578) : const Color(0xFF9CA3AF);
 
-        return Container(
+        return GlassCard(
+          isDark: isDark,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          decoration: _cardDecoration(isDark),
+          borderRadius: 14,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -443,9 +693,7 @@ class _TrendChartCard extends ConsumerWidget {
                             radius: 3.5,
                             color: const Color(0xFF6C47FF),
                             strokeWidth: 2,
-                            strokeColor: isDark
-                                ? const Color(0xFF1A1F35)
-                                : Colors.white,
+                            strokeColor: AppColors.cardBg(isDark),
                           ),
                         ),
                         belowBarData: BarAreaData(
@@ -533,10 +781,11 @@ class _TrendChartCard extends ConsumerWidget {
   }
 
   Widget _emptyState(AppLocalizations l10n) {
-    return Container(
-      height: 110,
+    return GlassCard(
+      isDark: isDark,
       padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(isDark),
+      borderRadius: 14,
+      constraints: const BoxConstraints(minHeight: 110),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -544,9 +793,7 @@ class _TrendChartCard extends ConsumerWidget {
             Icon(
               Icons.show_chart_rounded,
               size: 28,
-              color: isDark
-                  ? const Color(0xFF2D3562)
-                  : const Color(0xFFE5E7EB),
+              color: AppColors.borderColor(isDark),
             ),
             const SizedBox(height: 8),
             Text(
@@ -627,9 +874,10 @@ class _RecentPracticeSection extends ConsumerWidget {
           error: (_, __) => const SizedBox.shrink(),
           data: (sessions) {
             if (sessions.isEmpty) {
-              return Container(
+              return GlassCard(
+                isDark: isDark,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(isDark),
+                borderRadius: 14,
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -637,9 +885,7 @@ class _RecentPracticeSection extends ConsumerWidget {
                       Icon(
                         Icons.history_rounded,
                         size: 28,
-                        color: isDark
-                            ? const Color(0xFF2D3562)
-                            : const Color(0xFFE5E7EB),
+                        color: AppColors.borderColor(isDark),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -689,10 +935,10 @@ class _SessionTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+          color: AppColors.cardBg(isDark),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+            color: AppColors.borderColor(isDark),
           ),
         ),
         child: Row(
@@ -740,7 +986,7 @@ class _SessionTile extends StatelessWidget {
                         ? session.setTitle
                         : session.company,
                     style: TextStyle(
-                      color: isDark ? Colors.white : const Color(0xFF111827),
+                      color: AppColors.textPrimary(isDark),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -976,9 +1222,7 @@ class _AnimatedBarState extends State<_AnimatedBar>
           child: Container(
             height: 6,
             decoration: BoxDecoration(
-              color: widget.isDark
-                  ? const Color(0xFF2D3562)
-                  : const Color(0xFFE5E7EB),
+              color: AppColors.borderColor(widget.isDark),
               borderRadius: BorderRadius.circular(3),
             ),
             child: AnimatedBuilder(
@@ -1152,9 +1396,10 @@ class _RecommendedSets extends ConsumerWidget {
     final sets = state.sets.take(3).toList();
 
     if (sets.isEmpty) {
-      return Container(
+      return GlassCard(
+        isDark: isDark,
         padding: const EdgeInsets.all(20),
-        decoration: _cardDecoration(isDark),
+        borderRadius: 14,
         child: Center(
           child: Text(
             context.l10n.isVi
@@ -1229,7 +1474,7 @@ class _InProgressSection extends ConsumerWidget {
             Text(
               'Phiên đang dở',
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF111827),
+                color: AppColors.textPrimary(isDark),
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
               ),
@@ -1237,8 +1482,8 @@ class _InProgressSection extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 10),
-        ...sessions.map((s) => _InProgressCard(session: s, isDark: isDark)),
-        const SizedBox(height: 16),
+        ...sessions.take(3).map((s) => _InProgressCard(session: s, isDark: isDark)),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -1256,12 +1501,12 @@ class _InProgressCard extends StatelessWidget {
     final pct = total > 0 ? done / total : 0.0;
 
     return GestureDetector(
-      onTap: () => context.go('/jobseeker/practice/${session.setId}'),
+      onTap: () => context.push('/jobseeker/practice/${session.setId}'),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+          color: AppColors.cardBg(isDark),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: const Color(0xFF6C47FF).withValues(alpha: 0.3),
@@ -1321,7 +1566,7 @@ class _InProgressCard extends StatelessWidget {
                         ? session.setTitle
                         : 'Phiên luyện tập',
                     style: TextStyle(
-                      color: isDark ? Colors.white : const Color(0xFF111827),
+                      color: AppColors.textPrimary(isDark),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1345,9 +1590,7 @@ class _InProgressCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(3),
                     child: LinearProgressIndicator(
                       value: pct,
-                      backgroundColor: isDark
-                          ? const Color(0xFF2D3562)
-                          : const Color(0xFFE5E7EB),
+                      backgroundColor: AppColors.borderColor(isDark),
                       valueColor:
                           const AlwaysStoppedAnimation(Color(0xFF6C47FF)),
                       minHeight: 4,
@@ -1428,30 +1671,13 @@ class _SectionTitle extends StatelessWidget {
     return Text(
       title,
       style: TextStyle(
-        color: isDark ? Colors.white : const Color(0xFF111827),
+        color: AppColors.textPrimary(isDark),
         fontSize: 15,
         fontWeight: FontWeight.w700,
       ),
     );
   }
 }
-
-BoxDecoration _cardDecoration(bool isDark) => BoxDecoration(
-      color: isDark ? const Color(0xFF1A1F35) : Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(
-        color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
-      ),
-      boxShadow: isDark
-          ? []
-          : [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-    );
 
 // ── Pulsing skeleton box (replaces shimmer to avoid GlobalKey conflicts) ───────
 
@@ -1494,12 +1720,10 @@ class _PulsingBoxState extends State<_PulsingBox>
         height: widget.height,
         decoration: BoxDecoration(
           color:
-              widget.isDark ? const Color(0xFF1A1F35) : const Color(0xFFF3F4F6),
+              widget.isDark ? AppColors.darkCard : AppColors.gray100,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: widget.isDark
-                ? const Color(0xFF2D3562)
-                : const Color(0xFFE5E7EB),
+            color: AppColors.borderColor(widget.isDark),
           ),
         ),
       ),
@@ -1521,9 +1745,10 @@ class _ConsistencyCard extends ConsumerWidget {
     final isVi = l10n.isVi;
     final stats = ref.watch(practiceConsistencyProvider);
 
-    return Container(
+    return GlassCard(
+      isDark: isDark,
       padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(isDark),
+      borderRadius: 14,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1554,7 +1779,7 @@ class _ConsistencyCard extends ConsumerWidget {
                           : 'Practice Consistency',
                       style: TextStyle(
                         color:
-                            isDark ? Colors.white : const Color(0xFF111827),
+                            AppColors.textPrimary(isDark),
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1684,11 +1909,11 @@ class _ConsistencyChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F1729) : const Color(0xFFF8FAFC),
+          color: isDark ? const Color(0xFF0F1729) : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color:
-                isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+                AppColors.borderColor(isDark),
           ),
         ),
         child: Column(
@@ -1697,7 +1922,7 @@ class _ConsistencyChip extends StatelessWidget {
             Text(
               value,
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF111827),
+                color: AppColors.textPrimary(isDark),
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
               ),

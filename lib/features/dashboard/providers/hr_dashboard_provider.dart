@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../hr_generate/data/generation_api.dart';
+import '../../hr_generate/data/studio_repository.dart';
 import '../../hr_generate/domain/models/generation_session.dart';
+import '../../hr_generate/domain/models/studio_models.dart';
 import '../../hr_generate/domain/enums/generation_status.dart';
 
 // ── Time range ────────────────────────────────────────────────────────────────
@@ -212,38 +213,33 @@ class DashboardStats {
       };
 }
 
+// ── Map StudioProject → GenerationSession for dashboard stats ─────────────────
+
+GenerationStatus _studioStatusToGen(StudioProjectStatus s) => switch (s) {
+      StudioProjectStatus.generated ||
+      StudioProjectStatus.archived   => GenerationStatus.completed,
+      StudioProjectStatus.approved   => GenerationStatus.questionQueued,
+      StudioProjectStatus.awaitingApproval ||
+      StudioProjectStatus.refining   => GenerationStatus.planProposed,
+      StudioProjectStatus.draft      => GenerationStatus.draft,
+    };
+
+GenerationSession _projectToSession(StudioProject p) => GenerationSession(
+      id:        p.id,
+      jobTitle:  p.name,
+      status:    _studioStatusToGen(p.status),
+      rawPhase:  p.status.toApiString(),
+      createdAt: DateTime.now().toIso8601String(),
+      questionSetId: p.questionSetId,
+    );
+
 // ── Raw sessions ──────────────────────────────────────────────────────────────
 
 final hrSessionsRawProvider =
     FutureProvider.autoDispose<List<GenerationSession>>((ref) async {
-  final dio = buildGenerationDio();
-
-  // Jobs endpoint (required)
-  final jobResp = await dio.get('/api/hr/question-generation-jobs');
-
-  // Question-sets endpoint for title enrichment (optional — ignore errors)
-  final titleByJobId = <String, String>{};
-  try {
-    final qsResp = await dio.get('/api/hr/question-sets');
-    for (final raw in _extractList(qsResp.data)) {
-      if (raw is! Map) continue;
-      final jobId = (raw['jobId'] ?? raw['job_id'])?.toString();
-      final title = raw['title']?.toString().trim() ?? '';
-      if (jobId != null && jobId.isNotEmpty && title.isNotEmpty) {
-        titleByJobId[jobId] = title;
-      }
-    }
-  } catch (_) {}
-
-  final rawList = _extractList(jobResp.data);
-  return rawList.map((raw) {
-    if (raw is! Map) return null;
-    final job = Map<String, dynamic>.from(raw as Map);
-    final jobId = (job['jobId'] ?? job['id'] ?? job['job_id'])?.toString() ?? '';
-    job['title'] ??= titleByJobId[jobId];
-    return GenerationSession.fromJson(job);
-  }).whereType<GenerationSession>().toList()
-    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  final repo = StudioRepository();
+  final projects = await repo.listProjects();
+  return projects.map(_projectToSession).toList();
 });
 
 // ── Derived stats (instant, no extra API call on filter change) ───────────────
@@ -256,17 +252,3 @@ final hrDashboardProvider =
       .whenData((s) => DashboardStats.derive(s, range));
 });
 
-List<dynamic> _extractList(dynamic data) {
-  if (data is List) return data;
-  if (data is Map) {
-    final inner = data['data'];
-    if (inner is List) return inner;
-    if (inner is Map) {
-      final items = inner['items'] ?? inner['jobs'] ?? inner['data'];
-      if (items is List) return items;
-    }
-    final top = data['items'] ?? data['jobs'];
-    if (top is List) return top;
-  }
-  return [];
-}

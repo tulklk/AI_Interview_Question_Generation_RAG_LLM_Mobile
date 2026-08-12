@@ -41,7 +41,7 @@ class _CandidateJobsScreenState extends ConsumerState<CandidateJobsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Column(
           children: [

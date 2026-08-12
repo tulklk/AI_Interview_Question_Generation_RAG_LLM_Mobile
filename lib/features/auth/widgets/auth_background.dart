@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/grid_background.dart';
 
 // Particle screen-percentage positions (x%, y%)
 const _particlePositions = [
@@ -61,7 +62,7 @@ class _AuthBackgroundState extends State<AuthBackground>
             RepaintBoundary(
               child: _AuroraLayer(controller: _aurora, isDark: isDark),
             ),
-          _GridLayer(isDark: isDark),
+          Positioned.fill(child: GridBackground(isDark: isDark)),
           if (!reduceMotion) ...[
             RepaintBoundary(
               child: _ParticlesLayer(controllers: _particles, isDark: isDark),
@@ -180,50 +181,6 @@ class _BlobConfig {
     required this.ampX, required this.ampY,
     required this.phase,
   });
-}
-
-// ─── L3: Grid ─────────────────────────────────────────────────────────────────
-
-class _GridLayer extends StatelessWidget {
-  final bool isDark;
-  const _GridLayer({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) => ShaderMask(
-    shaderCallback: (bounds) => const RadialGradient(
-      center: Alignment.center,
-      radius: 0.75,
-      colors: [Colors.white, Colors.transparent],
-    ).createShader(bounds),
-    blendMode: BlendMode.dstIn,
-    child: CustomPaint(
-      painter: _GridPainter(isDark: isDark),
-    ),
-  );
-}
-
-class _GridPainter extends CustomPainter {
-  final bool isDark;
-  _GridPainter({required this.isDark});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = isDark
-          ? Colors.white.withValues(alpha: 0.04)
-          : const Color(0xFF6C47FF).withValues(alpha: 0.07)
-      ..strokeWidth = 0.6;
-    const step = 48.0;
-    for (double y = 0; y <= size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-    for (double x = 0; x <= size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GridPainter old) => old.isDark != isDark;
 }
 
 // ─── L4: Particles ───────────────────────────────────────────────────────────

@@ -253,7 +253,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       if (verify.isExistingUser) {
         // Already registered → log them in directly
         setState(() => _isLoading = false);
-        await ref.read(authProvider.notifier).loginWithGoogle(idToken);
+        await ref.read(authProvider.notifier).loginWithGoogle(
+          idToken,
+          googlePhotoUrl: account.photoUrl,
+        );
         return;
       }
 
@@ -270,6 +273,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       await ref.read(authProvider.notifier).loginWithGoogle(
         idToken,
         profile: profile,
+        googlePhotoUrl: account.photoUrl,
       );
       // GoRouter redirect handles navigation after user is set
     } on AuthException catch (e) {

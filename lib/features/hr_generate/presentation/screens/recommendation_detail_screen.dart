@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../domain/models/candidate_recommendation.dart';
 import '../providers/recommendation_provider.dart';
 import '../widgets/recommendation_shared_widgets.dart';
+import '../../../../core/widgets/grid_background.dart';
 
 class RecommendationDetailScreen extends ConsumerWidget {
   final String recommendationId;
@@ -43,13 +44,15 @@ class RecommendationDetailScreen extends ConsumerWidget {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      body: item == null
-          ? _ErrorState(onBack: () => context.pop())
-          : _DetailBody(
-              item: item,
-              isDark: isDark,
-              recommendationId: recommendationId,
-            ),
+      body: GridBackdrop(
+        child: item == null
+            ? _ErrorState(onBack: () => context.pop())
+            : _DetailBody(
+                item: item,
+                isDark: isDark,
+                recommendationId: recommendationId,
+              ),
+      ),
     );
   }
 }
@@ -393,7 +396,7 @@ class _ActionCardState extends ConsumerState<_ActionCard> {
     }
 
     if (!mounted) return;
-    if (ok && next != null) {
+    if (ok) {
       setState(() => _current = next!);
       ref.read(recommendationListProvider.notifier).updateItemStatus(id, next);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

@@ -69,21 +69,30 @@ class AuthLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      AppLogoImage(
-        size: 72,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.brandPurple.withValues(alpha: 0.40),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+      const AppLogoImage(size: 72),
       const SizedBox(height: 10),
-      Text(AppConstants.appName,
-        style: AppTextStyles.h3.copyWith(
-          color: isDark ? AppColors.white : AppColors.nearBlack,
-          fontSize: 18, fontWeight: FontWeight.w800)),
+      RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: 'HireGen ',
+              style: AppTextStyles.h3.copyWith(
+                color: isDark ? AppColors.white : AppColors.nearBlack,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            TextSpan(
+              text: 'AI',
+              style: AppTextStyles.h3.copyWith(
+                color: AppColors.brandPurple,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
       const SizedBox(height: 2),
       Text('AI-Powered Interview Question Generator',
         style: AppTextStyles.caption.copyWith(

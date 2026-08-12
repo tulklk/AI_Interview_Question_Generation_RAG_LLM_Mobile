@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/models.dart';
 import '../mock/mock_data.dart';
 import '../services/auth_events.dart';
 import '../services/auth_service.dart';
+import '../services/profile_service.dart';
 import '../services/storage_service.dart';
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
@@ -60,12 +63,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final session = await StorageService.getSavedSession();
     if (session == null || !mounted) return;
     final role = _roleFromString(session['userRole'] ?? '');
+    final avatar = session['avatarUrl'];
     state = AuthState(
       user: UserModel(
         id: session['userId']!,
         name: session['userName']!,
         email: session['userEmail']!,
         role: role,
+        avatarUrl: (avatar != null && avatar.isNotEmpty) ? avatar : null,
       ),
     );
   }
@@ -83,6 +88,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userRole:     result.user.role.name,
         userName:     result.user.name,
         userEmail:    result.user.email,
+        avatarUrl:    result.user.avatarUrl,
       );
       if (mounted) state = AuthState(user: result.user, showWelcome: true);
     } on AuthException catch (e) {
@@ -106,19 +112,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // ── Google OAuth ──────────────────────────────────────────────────────
 
-  Future<void> loginWithGoogle(String idToken, {GoogleProfileData? profile}) async {
+  Future<void> loginWithGoogle(
+    String idToken, {
+    GoogleProfileData? profile,
+    String? googlePhotoUrl,
+  }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final result = await AuthService.loginWithGoogle(idToken, profile: profile);
+      var user = result.user;
+
+      // §4.6 — sync Google avatar when profile has none (best-effort)
+      final photo = _resolveGooglePhoto(googlePhotoUrl, idToken);
+      if (_isBlank(user.avatarUrl) && !_isBlank(photo)) {
+        user = user.copyWith(avatarUrl: photo);
+        try {
+          await ProfileService.syncAvatarUrl(
+            token: result.accessToken,
+            avatarUrl: photo!,
+          );
+        } catch (_) {
+          // Non-blocking — avatar still shown from local state
+        }
+      }
+
       await StorageService.saveSession(
         accessToken:  result.accessToken,
         refreshToken: result.refreshToken,
-        userId:       result.user.id,
-        userRole:     result.user.role.name,
-        userName:     result.user.name,
-        userEmail:    result.user.email,
+        userId:       user.id,
+        userRole:     user.role.name,
+        userName:     user.name,
+        userEmail:    user.email,
+        avatarUrl:    user.avatarUrl,
       );
-      if (mounted) state = AuthState(user: result.user, showWelcome: true);
+      if (mounted) state = AuthState(user: user, showWelcome: true);
     } on AuthException catch (e) {
       if (mounted) {
         state = state.copyWith(
@@ -154,6 +181,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void updateUser(UserModel user) {
     state = state.copyWith(user: user);
+    // Persist avatar/name changes so cold start keeps photo
+    final current = state.user;
+    if (current != null) {
+      StorageService.getAccessToken().then((token) async {
+        if (token == null || token.isEmpty) return;
+        final refresh = await StorageService.getRefreshToken() ?? '';
+        await StorageService.saveSession(
+          accessToken:  token,
+          refreshToken: refresh,
+          userId:       current.id,
+          userRole:     current.role.name,
+          userName:     current.name,
+          userEmail:    current.email,
+          avatarUrl:    current.avatarUrl,
+        );
+      });
+    }
   }
 
   void consumeWelcome() {
@@ -164,6 +208,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await AuthService.logout();          // AC-02: vô hiệu hóa token phía server
     await StorageService.clearSession(); // AC-03: xóa token + session phía client
     if (mounted) state = const AuthState(); // AC-07: đồng bộ trạng thái UI
+  }
+
+  static bool _isBlank(String? s) => s == null || s.trim().isEmpty;
+
+  /// Prefer account.photoUrl; fall back to JWT `picture` claim.
+  static String? _resolveGooglePhoto(String? photoUrl, String idToken) {
+    if (!_isBlank(photoUrl)) return photoUrl!.trim();
+    return _pictureFromIdToken(idToken);
+  }
+
+  static String? _pictureFromIdToken(String idToken) {
+    try {
+      final parts = idToken.split('.');
+      if (parts.length < 2) return null;
+      final payload = parts[1];
+      final normalized = base64Url.normalize(payload);
+      final map = jsonDecode(utf8.decode(base64Url.decode(normalized)));
+      if (map is! Map) return null;
+      final picture = map['picture']?.toString();
+      return _isBlank(picture) ? null : picture;
+    } catch (_) {
+      return null;
+    }
   }
 
   static UserRole _roleFromString(String s) {

@@ -171,7 +171,7 @@ class KnowledgeNotifier extends StateNotifier<KnowledgeState> {
     if (result == null || result.files.isEmpty) return;
 
     for (final file in result.files) {
-      if ((file.size ?? 0) > _maxBytes) {
+      if (file.size > _maxBytes) {
         state = state.copyWith(error: '${file.name} exceeds 20 MB limit');
         continue;
       }

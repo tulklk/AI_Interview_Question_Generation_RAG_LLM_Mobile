@@ -1,10 +1,12 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/i18n/app_localizations.dart';
+import '../../../../core/widgets/grid_background.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
@@ -56,40 +58,40 @@ class _FeedbackColors {
   static const _dark = _FeedbackColors._(
     bg:           Color(0xFF080B14),
     card:         Color(0xFF0D1117),
-    surface:      Color(0xFF1A1F35),
-    border:       Color(0xFF1E2640),
-    innerBorder:  Color(0xFF2D3562),
+    surface:      AppColors.darkCard,
+    border:       AppColors.darkChip,
+    innerBorder:  AppColors.darkCardBorder,
     primaryText:  Colors.white,
     secondaryText: Color(0xFF6B7280),
     mutedText:    Color(0xFF9CA3AF),
     answerText:   Color(0xFFD1D5DB),
-    divider:      Color(0xFF1E2640),
-    ringTrack:    Color(0xFF2D3562),
-    radarBorder:  Color(0xFF2D3562),
-    radarGrid:    Color(0xFF1E2640),
-    radarTickText: Color(0xFF2D3562),
+    divider:      AppColors.darkChip,
+    ringTrack:    AppColors.darkCardBorder,
+    radarBorder:  AppColors.darkCardBorder,
+    radarGrid:    AppColors.darkChip,
+    radarTickText: AppColors.darkCardBorder,
     radarTitle:   Color(0xFF6B7280),
-    barTrack:     Color(0xFF2D3562),
+    barTrack:     AppColors.darkCardBorder,
     expandIcon:   Color(0xFF4A5578),
   );
 
   static const _light = _FeedbackColors._(
-    bg:           Color(0xFFF8FAFC),
+    bg:           AppColors.surfaceLight,
     card:         Colors.white,
     surface:      Color(0xFFF1F5F9),
-    border:       Color(0xFFE5E7EB),
+    border:       AppColors.gray200,
     innerBorder:  Color(0xFFD1D5DB),
-    primaryText:  Color(0xFF111827),
+    primaryText:  AppColors.nearBlack,
     secondaryText: Color(0xFF6B7280),
     mutedText:    Color(0xFF9CA3AF),
     answerText:   Color(0xFF374151),
-    divider:      Color(0xFFE5E7EB),
-    ringTrack:    Color(0xFFE5E7EB),
+    divider:      AppColors.gray200,
+    ringTrack:    AppColors.gray200,
     radarBorder:  Color(0xFFD1D5DB),
-    radarGrid:    Color(0xFFE5E7EB),
+    radarGrid:    AppColors.gray200,
     radarTickText: Color(0xFFD1D5DB),
     radarTitle:   Color(0xFF9CA3AF),
-    barTrack:     Color(0xFFE5E7EB),
+    barTrack:     AppColors.gray200,
     expandIcon:   Color(0xFF9CA3AF),
   );
 }
@@ -200,7 +202,8 @@ class FeedbackScreen extends ConsumerWidget {
         return Scaffold(
           backgroundColor: c.bg,
           appBar: _buildAppBar(context, l10n, c),
-          body: SingleChildScrollView(
+          body: GridBackdrop(
+            child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,6 +254,7 @@ class FeedbackScreen extends ConsumerWidget {
                 ).animate().fadeIn(delay: 280.ms),
               ],
             ),
+          ),
           ),
         );
       },
@@ -477,7 +481,7 @@ class _ScoreHeaderState extends State<_ScoreHeader>
               Expanded(
                 child: OutlinedButton(
                   onPressed: () =>
-                      context.go('/jobseeker/practice/${widget.setId}'),
+                      context.push('/jobseeker/practice/${widget.setId}'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: _kPrimary,
                     side: const BorderSide(color: _kPrimary),

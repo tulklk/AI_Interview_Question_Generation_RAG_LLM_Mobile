@@ -12,6 +12,7 @@ import '../../../core/widgets/app_progress_ring.dart';
 import '../../../core/widgets/app_secondary_button.dart';
 import '../../../core/widgets/app_skill_chip.dart';
 import '../../../core/widgets/app_status_badge.dart';
+import '../../../core/widgets/grid_background.dart';
 import '../../../data/providers/app_providers.dart';
 import '../../../models/candidate_model.dart';
 
@@ -28,7 +29,8 @@ class CandidateDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
-      body: CustomScrollView(
+      body: GridBackdrop(
+        child: CustomScrollView(
         slivers: [
           // Header
           SliverAppBar(
@@ -222,6 +224,7 @@ class CandidateDetailScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

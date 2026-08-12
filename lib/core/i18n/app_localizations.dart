@@ -349,6 +349,22 @@ class AppLocalizations {
   String get stay              => isVi ? 'Ở lại'              : 'Stay';
   String charsCount(int n)     => isVi ? '$n ký tự' : '$n characters';
   String get charsRecommended  => isVi ? ' · Nên nhập 150+ ký tự' : ' · 150+ recommended';
+  // code-type questions
+  String get codeAnswerLabel       => isVi ? 'CODE CỦA BẠN'           : 'YOUR CODE';
+  String get codeAnswerPlaceholder => isVi
+      ? '// Viết code của bạn ở đây...\n// Giải thích logic và cách tiếp cận của bạn.'
+      : '// Write your code here...\n// Explain your logic and approach.';
+  String get validationTooShort    => isVi
+      ? 'Câu trả lời quá ngắn (tối thiểu 20 ký tự).'
+      : 'Answer too short (minimum 20 characters).';
+  String get validationTooFewWords => isVi
+      ? 'Hãy nhập ít nhất 3 từ.'
+      : 'Please enter at least 3 words.';
+  String get lockedQuestionTitle   => isVi ? 'Câu hỏi dành cho Premium' : 'Premium Question';
+  String get lockedQuestionBody    => isVi
+      ? 'Nâng cấp lên Premium để xem đề bài và trả lời câu hỏi dạng Code.'
+      : 'Upgrade to Premium to view the prompt and answer Code questions.';
+  String get upgradeToPremium      => isVi ? 'Nâng cấp Premium' : 'Upgrade to Premium';
 
   // ── Feedback / Result ─────────────────────────────────────────────────────
   String get overallScore      => isVi ? 'Điểm tổng quát'    : 'Overall Score';
@@ -436,17 +452,55 @@ class AppLocalizations {
   String get english           => isVi ? 'English'            : 'English';
   String get vietnamese        => isVi ? 'Tiếng Việt'         : 'Tiếng Việt';
   String get appearanceSection => isVi ? 'Giao diện'          : 'Appearance';
+  String get appearanceSectionDesc => isVi ? 'Chế độ sáng, tối hoặc theo hệ thống' : 'Light, dark, or follow system';
   String get lightTheme        => isVi ? 'Sáng'               : 'Light';
   String get darkTheme         => isVi ? 'Tối'                : 'Dark';
   String get systemTheme_      => isVi ? 'Theo hệ thống'      : 'System';
   String get notificationsSection => isVi ? 'Thông báo'       : 'Notifications';
+  String get notificationsSectionDesc => isVi ? 'Tuỳ chọn thông báo trên thiết bị này' : 'Notification preferences on this device';
   String get emailReminders    => isVi ? 'Nhắc nhở luyện tập qua email' : 'Email reminders for practice streaks';
   String get weeklyProgress    => isVi ? 'Tóm tắt tiến độ hàng tuần' : 'Weekly progress summaries';
   String get aiTips            => isVi ? 'Mẹo phỏng vấn AI'  : 'AI interview tips and insights';
   String get privacySection    => isVi ? 'Quyền riêng tư & Dữ liệu' : 'Privacy & Data';
+  String get privacySectionDesc => isVi ? 'Quyền riêng tư và dữ liệu tài khoản' : 'Privacy and account data';
   String get downloadData      => isVi ? 'Tải xuống dữ liệu của tôi' : 'Download my data';
   String get deleteHistory     => isVi ? 'Xóa lịch sử luyện tập' : 'Delete practice history';
   String get deleteAccount     => isVi ? 'Xóa tài khoản'     : 'Delete account';
+
+  // Settings – additional tab labels
+  String get generalTab        => isVi ? 'Chung'              : 'General';
+  String get privacyTab        => isVi ? 'Riêng tư'          : 'Privacy';
+  String get xpHistoryTab      => isVi ? 'Lịch sử XP'        : 'XP History';
+
+  // Settings – Security tab
+  String get accountSecurity      => isVi ? 'Bảo mật tài khoản'      : 'Account Security';
+  String get accountSecurityDesc  => isVi ? 'Quản lý mật khẩu và phương thức đăng nhập' : 'Manage your password and sign-in methods';
+  String get loginSessions        => isVi ? 'Phiên đăng nhập'         : 'Login Sessions';
+  String get comingSoon           => isVi ? 'Tính năng sắp ra mắt'    : 'Coming soon';
+  String get twoFactorAuth        => isVi ? 'Xác thực 2 lớp'          : 'Two-Factor Authentication';
+  String get twoFactorAuthDesc    => isVi ? 'Tăng bảo mật cho tài khoản của bạn' : 'Strengthen your account security';
+  String get twoFactorComingSoon  => isVi ? 'Xác thực 2 lớp sẽ được tích hợp trong phiên bản sắp tới.' : '2FA will be integrated in an upcoming release.';
+
+  // Settings – Privacy tab
+  String get accountData          => isVi ? 'Dữ liệu tài khoản'       : 'Account Data';
+  String get accountDataDesc      => isVi ? 'Quản lý và xoá dữ liệu cá nhân' : 'Manage and delete your personal data';
+  String get recruiterRecommendTitle     => isVi ? 'Đề xuất cho nhà tuyển dụng' : 'Recruiter Recommendation';
+  String get recruiterRecommendPremiumDesc => isVi ? 'Khi bật, phiên luyện đạt chuẩn có thể được đề xuất cho HR.' : 'When on, qualifying sessions may be recommended to HR.';
+  String get recruiterRecommendFreeDesc  => isVi ? 'Yêu cầu gói Premium. Chạm để xem Thanh toán.' : 'Requires Premium. Tap to view Payment.';
+  String saveFailed(Object e)     => isVi ? 'Không lưu được: $e'      : 'Could not save: $e';
+
+  // Settings – XP History tab
+  String get xpTitle              => isVi ? 'Điểm kinh nghiệm (XP)'   : 'Experience Points (XP)';
+  String get xpDesc               => isVi ? 'Nhận XP qua mỗi phiên luyện tập để lên cấp và mở khoá thành tích.' : 'Earn XP from each practice session to level up and unlock achievements.';
+  String get xpHistoryDesc        => isVi ? 'Xem toàn bộ điểm kinh nghiệm tại Bảng điều khiển' : 'View your full XP log on the Dashboard';
+  String get viewDashboard        => isVi ? 'Xem Bảng điều khiển'     : 'View Dashboard';
+  String get achievementsBadges   => isVi ? 'Thành tích & huy hiệu'   : 'Achievements & Badges';
+  String get levelTable           => isVi ? 'Bảng cấp độ'             : 'Level Table';
+  String levelLabel(int n)        => isVi ? 'Cấp $n'                  : 'Level $n';
+  String get level5Plus           => isVi ? 'Cấp 5+'                  : 'Level 5+';
+
+  // Settings – Destructive confirm dialog
+  String get actionCannotUndo     => isVi ? 'Hành động này không thể hoàn tác. Bạn có chắc không?' : 'This action cannot be undone. Are you sure?';
 
   // ── CV / Resume ──────────────────────────────────────────────────────────
   String get cvResume        => isVi ? 'CV / Hồ sơ'               : 'CV / Resume';
@@ -467,6 +521,48 @@ class AppLocalizations {
   String get cvSizeError     => isVi ? 'File quá lớn (tối đa 10MB).' : 'File too large (max 10MB).';
   String get acceptedFormats => isVi ? 'PDF, DOCX, JPG, JPEG, PNG · Tối đa 10MB' : 'PDF, DOCX, JPG, JPEG, PNG · Max 10MB';
   String get chooseFile      => isVi ? 'Chọn file'                : 'Choose file';
+
+  // ── Saved / Bookmarks ────────────────────────────────────────────────────
+  String get savedSets          => isVi ? 'Đã lưu'              : 'Saved';
+  String get navSaved           => isVi ? 'Đã lưu'              : 'Saved';
+  String get navInvitations     => isVi ? 'Lời mời'             : 'Invites';
+  String get invitations        => isVi ? 'Lời mời phỏng vấn'  : 'Interview Invitations';
+
+  // ── Feedback Result / Freemium ────────────────────────────────────────────
+  String get practiceResult         => isVi ? 'Kết quả luyện tập'    : 'Practice Result';
+  String get loadingFeedback        => isVi ? 'Đang tải phản hồi...' : 'Loading feedback...';
+  String get freemiumLockedBadge    => 'PREMIUM';
+  String get freemiumTeaserBadge    => isVi ? 'Mẫu Free'     : 'Free Sample';
+  String get freemiumUpsellHeadline =>
+      isVi ? 'Bạn đã hoàn thành — AI đã sẵn sàng phân tích bài làm'
+           : 'You\'re done — AI is ready to analyze your session';
+  String get freemiumUpsellBody     =>
+      isVi ? 'Free xem điểm tổng + 1 câu mẫu. Premium mở điểm từng câu, skill gap và lộ trình học cá nhân.'
+           : 'Free shows overall score + 1 sample question. Premium unlocks per-question scores, skill gaps, and your personalized learning path.';
+  String get freemiumUpsellCta      => isVi ? 'Mở full AI Feedback'     : 'Unlock Full AI Feedback';
+  String get freemiumLockedTitle    => isVi ? 'Chi tiết AI bị khóa'     : 'AI Details Locked';
+  String get freemiumLockedHint     =>
+      isVi ? 'Phần này gồm điểm + gợi ý sửa. Nâng Premium để mở toàn bộ câu.'
+           : 'This section includes score + improvement hints. Upgrade to Premium to unlock all questions.';
+  String get practiceOtherSet       => isVi ? 'Luyện set khác'          : 'Try Another Set';
+  String get aiScoring              => isVi ? 'AI đang chấm điểm...'    : 'AI is scoring...';
+  String get actionPlan             => isVi ? 'Kế hoạch cải thiện'      : 'Improvement Plan';
+  String get actionPlanDesc         =>
+      isVi ? 'Các điểm cần cải thiện dựa trên câu trả lời yếu nhất phiên này'
+           : 'Top areas to improve based on your weakest answers this session';
+  String get skillAnalysis          => isVi ? 'Phân tích kỹ năng'       : 'Skill Analysis';
+  String get skillAnalysisDesc      =>
+      isVi ? 'Điểm trung bình từng chiều đánh giá' : 'Average score per evaluation dimension';
+  String get sessionNotFound        => isVi ? 'Không tìm thấy phiên luyện tập' : 'Session not found';
+  String get xpEarned               => isVi ? 'XP nhận được'            : 'XP Earned';
+  String get rateSession            => isVi ? 'Đánh giá phiên luyện'    : 'Rate This Session';
+  String get rateSessionBody        =>
+      isVi ? 'Phiên luyện tập hữu ích thế nào đối với bạn?'
+           : 'How useful was this practice session for you?';
+  String get submitRating           => isVi ? 'Gửi đánh giá'            : 'Submit Rating';
+  String get skipRating             => isVi ? 'Bỏ qua'                  : 'Skip';
+  String get answered               => isVi ? 'Đã trả lời'              : 'Answered';
+  String get scoreLabel             => isVi ? 'Điểm'                    : 'Score';
 
   // ── Common ───────────────────────────────────────────────────────────────
   String get loading      => isVi ? 'Đang tải...'      : 'Loading...';

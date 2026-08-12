@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import '../../../../core/i18n/app_localizations.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_gradient_button.dart';
+import '../../../../core/widgets/skill_icon.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
@@ -27,6 +30,8 @@ class MarketplaceScreen extends ConsumerStatefulWidget {
 
 class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   final _searchCtrl = TextEditingController();
+  int _currentPage = 0;
+  static const _pageSize = 5;
 
   static const _categories = [
     'All',
@@ -60,6 +65,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     ref.listen<MarketplaceFilterState>(marketplaceFilterProvider,
         (prev, next) {
       if (prev == next) return;
+      // Reset to first page whenever filter/search changes
+      if (mounted) setState(() => _currentPage = 0);
       final isSearch = prev?.searchQuery != next.searchQuery;
       ref
           .read(marketplaceApiProvider.notifier)
@@ -85,11 +92,20 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             ? l10n.noSetsFound
             : l10n.setsFound(filteredSets.length),
         style: AppTextStyles.labelBold.copyWith(
-          color: isDark ? AppColors.white : AppColors.nearBlack,
+          color: AppColors.textPrimary(isDark),
           fontSize: 13,
         ),
       );
     }
+
+    // Pagination
+    final totalPages = filteredSets.isEmpty
+        ? 1
+        : ((filteredSets.length + _pageSize - 1) ~/ _pageSize);
+    final safePage = _currentPage.clamp(0, totalPages - 1);
+    final pageStart = safePage * _pageSize;
+    final pageEnd = (pageStart + _pageSize).clamp(0, filteredSets.length);
+    final pagedSets = filteredSets.isEmpty ? <QuestionSet>[] : filteredSets.sublist(pageStart, pageEnd);
 
     Widget gridSliver;
     if (apiState.isLoading) {
@@ -109,11 +125,11 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         child: _EmptyState(isDark: isDark),
       );
     } else {
-      gridSliver = _SetsGrid(sets: filteredSets, isDark: isDark);
+      gridSliver = _SetsGrid(sets: pagedSets, isDark: isDark);
     }
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF070A13) : const Color(0xFFF8FAFC),
+      backgroundColor: Colors.transparent,
       body: RefreshIndicator(
         color: AppColors.brandPurple,
         onRefresh: () => ref.read(marketplaceApiProvider.notifier).refresh(),
@@ -140,31 +156,21 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1, end: 0),
             ),
 
-            // ── Category pills ───────────────────────────────────────────────
+            // ── Compact filter bar ────────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 14, 0, 0),
-                child: _CategoryPills(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: _CompactFilterBar(
                   categories: _categories,
-                  selected: filter.categoryFilter,
+                  difficulties: _difficulties,
+                  selectedCategory: filter.categoryFilter,
+                  selectedDifficulty: filter.difficultyFilter,
                   isDark: isDark,
-                  onSelect: filterNotifier.setCategory,
                   l10n: l10n,
+                  onCategoryChanged: filterNotifier.setCategory,
+                  onDifficultyChanged: filterNotifier.setDifficulty,
                 ),
               ).animate().fadeIn(delay: 200.ms),
-            ),
-
-            // ── Difficulty pills ─────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                child: _DifficultyPills(
-                  difficulties: _difficulties,
-                  selected: filter.difficultyFilter,
-                  isDark: isDark,
-                  onSelect: filterNotifier.setDifficulty,
-                ),
-              ).animate().fadeIn(delay: 230.ms),
             ),
 
             // ── Results header ───────────────────────────────────────────────
@@ -177,9 +183,26 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
 
             // ── Cards grid / skeleton / empty / error ────────────────────────
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               sliver: gridSliver,
             ),
+
+            // ── Pagination controls ───────────────────────────────────────────
+            if (!apiState.isLoading && apiState.error == null && totalPages > 1)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                  child: _PaginationBar(
+                    currentPage: safePage,
+                    totalPages:  totalPages,
+                    isDark:      isDark,
+                    onPageChanged: (p) => setState(() => _currentPage = p),
+                  ),
+                ),
+              ),
+
+            if (apiState.isLoading || apiState.error != null || totalPages <= 1)
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
       ),
@@ -396,7 +419,7 @@ class _SearchBar extends StatelessWidget {
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        color: AppColors.cardBg(isDark),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
@@ -430,7 +453,7 @@ class _SearchBar extends StatelessWidget {
               onChanged: onChanged,
               style: AppTextStyles.body.copyWith(
                 fontSize: 14,
-                color: isDark ? AppColors.white : AppColors.nearBlack,
+                color: AppColors.textPrimary(isDark),
               ),
               decoration: InputDecoration(
                 hintText: hint,
@@ -454,108 +477,41 @@ class _SearchBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Category pills
+// Compact filter bar  (two dropdown-style buttons: category + difficulty)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CategoryPills extends StatelessWidget {
+class _CompactFilterBar extends StatelessWidget {
   final List<String> categories;
-  final String selected;
-  final bool isDark;
-  final ValueChanged<String> onSelect;
-  final AppLocalizations l10n;
-
-  const _CategoryPills({
-    required this.categories,
-    required this.selected,
-    required this.isDark,
-    required this.onSelect,
-    required this.l10n,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 38,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: categories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final cat = categories[i];
-          final isActive = cat == selected;
-          final isAll = cat == 'All';
-
-          Color activeColor;
-          if (isAll) {
-            activeColor = AppColors.brandPurple;
-          } else {
-            // Assign unique tints per category
-            const tints = {
-              'Frontend': Color(0xFF3B82F6),
-              'Full Stack': Color(0xFF8B5CF6),
-              'Backend': Color(0xFF10B981),
-              'Product': Color(0xFFF59E0B),
-              'Data': Color(0xFFEC4899),
-              'DevOps': Color(0xFF06B6D4),
-            };
-            activeColor = tints[cat] ?? AppColors.brandPurple;
-          }
-
-          return GestureDetector(
-            onTap: () => onSelect(cat),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? (isAll ? AppColors.brandPurple : activeColor.withValues(alpha: 0.15))
-                    : (isDark ? const Color(0xFF1A1F35) : Colors.white),
-                borderRadius: BorderRadius.circular(100),
-                border: Border.all(
-                  color: isActive
-                      ? (isAll ? AppColors.brandPurple : activeColor)
-                      : (isDark ? AppColors.darkCardBorder : AppColors.gray200),
-                ),
-              ),
-              child: Text(
-                cat,
-                style: AppTextStyles.label.copyWith(
-                  fontSize: 12,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive
-                      ? (isAll ? Colors.white : activeColor)
-                      : (isDark
-                          ? AppColors.white.withValues(alpha: 0.70)
-                          : AppColors.gray500),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Difficulty pills
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _DifficultyPills extends StatelessWidget {
   final List<String> difficulties;
-  final String selected;
+  final String selectedCategory;
+  final String selectedDifficulty;
   final bool isDark;
-  final ValueChanged<String> onSelect;
+  final AppLocalizations l10n;
+  final ValueChanged<String> onCategoryChanged;
+  final ValueChanged<String> onDifficultyChanged;
 
-  const _DifficultyPills({
+  const _CompactFilterBar({
+    required this.categories,
     required this.difficulties,
-    required this.selected,
+    required this.selectedCategory,
+    required this.selectedDifficulty,
     required this.isDark,
-    required this.onSelect,
+    required this.l10n,
+    required this.onCategoryChanged,
+    required this.onDifficultyChanged,
   });
 
-  Color _colorFor(String d) {
+  static const _catTints = {
+    'All': AppColors.brandPurple,
+    'Frontend': Color(0xFF3B82F6),
+    'Full Stack': Color(0xFF8B5CF6),
+    'Backend': Color(0xFF10B981),
+    'Product': Color(0xFFF59E0B),
+    'Data': Color(0xFFEC4899),
+    'DevOps': Color(0xFF06B6D4),
+  };
+
+  static Color _diffColor(String d) {
     switch (d) {
       case 'Easy':   return const Color(0xFF10B981);
       case 'Medium': return const Color(0xFFF59E0B);
@@ -564,52 +520,327 @@ class _DifficultyPills extends StatelessWidget {
     }
   }
 
+  String _diffLabel(String d) {
+    if (!l10n.isVi) return d;
+    switch (d) {
+      case 'Easy':   return 'Dễ';
+      case 'Medium': return 'Trung bình';
+      case 'Hard':   return 'Khó';
+      default:       return l10n.isVi ? 'Tất cả' : 'All';
+    }
+  }
+
+  void _showOptions({
+    required BuildContext ctx,
+    required String title,
+    required List<String> items,
+    required String selected,
+    required ValueChanged<String> onSelect,
+    String Function(String)? labelBuilder,
+    Map<String, Color>? tints,
+    Color Function(String)? colorBuilder,
+  }) {
+    showModalBottomSheet(
+      context: ctx,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) => _FilterOptionSheet(
+        title: title,
+        items: items,
+        selected: selected,
+        isDark: isDark,
+        labelBuilder: labelBuilder,
+        tints: tints,
+        colorBuilder: colorBuilder,
+        onSelect: (v) {
+          onSelect(v);
+          Navigator.pop(sheetCtx);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 36,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: difficulties.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final diff = difficulties[i];
-          final isActive = diff == selected;
-          final color = _colorFor(diff);
+    final catActive   = selectedCategory != 'All';
+    final diffActive  = selectedDifficulty != 'All';
+    final catColor    = _catTints[selectedCategory] ?? AppColors.brandPurple;
+    final diffColor   = _diffColor(selectedDifficulty);
 
-          return GestureDetector(
-            onTap: () => onSelect(diff),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? color.withValues(alpha: 0.15)
-                    : (isDark ? const Color(0xFF1A1F35) : Colors.white),
-                borderRadius: BorderRadius.circular(100),
-                border: Border.all(
-                  color: isActive
-                      ? color
-                      : (isDark ? AppColors.darkCardBorder : AppColors.gray200),
-                  width: isActive ? 1.5 : 1.0,
-                ),
-              ),
+    return Row(
+      children: [
+        // ── Category ────────────────────────────────────────────────────────
+        Expanded(
+          child: _FilterDropBtn(
+            icon: PhosphorIconsRegular.funnelSimple,
+            label: catActive
+                ? selectedCategory
+                : (l10n.isVi ? 'Danh mục' : 'Category'),
+            isActive: catActive,
+            activeColor: catColor,
+            isDark: isDark,
+            onTap: () => _showOptions(
+              ctx: context,
+              title: l10n.isVi ? 'Chọn danh mục' : 'Select Category',
+              items: categories,
+              selected: selectedCategory,
+              tints: _catTints,
+              onSelect: onCategoryChanged,
+            ),
+            onClear: catActive ? () => onCategoryChanged('All') : null,
+          ),
+        ),
+        const SizedBox(width: 10),
+        // ── Difficulty ──────────────────────────────────────────────────────
+        Expanded(
+          child: _FilterDropBtn(
+            icon: PhosphorIconsRegular.chartBar,
+            label: diffActive
+                ? _diffLabel(selectedDifficulty)
+                : (l10n.isVi ? 'Cấp độ' : 'Level'),
+            isActive: diffActive,
+            activeColor: diffColor,
+            isDark: isDark,
+            onTap: () => _showOptions(
+              ctx: context,
+              title: l10n.isVi ? 'Chọn cấp độ' : 'Select Level',
+              items: difficulties,
+              selected: selectedDifficulty,
+              colorBuilder: _diffColor,
+              labelBuilder: _diffLabel,
+              onSelect: onDifficultyChanged,
+            ),
+            onClear: diffActive ? () => onDifficultyChanged('All') : null,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Single filter dropdown button
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FilterDropBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final Color activeColor;
+  final bool isDark;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  const _FilterDropBtn({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.activeColor,
+    required this.isDark,
+    required this.onTap,
+    this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final inactiveIcon  = isDark
+        ? AppColors.white.withValues(alpha: 0.40)
+        : AppColors.gray400;
+    final inactiveText  = isDark
+        ? AppColors.white.withValues(alpha: 0.58)
+        : AppColors.gray500;
+    final borderColor   = isActive
+        ? activeColor.withValues(alpha: isDark ? 0.55 : 0.45)
+        : (AppColors.borderColor(isDark));
+    final bgColor = isActive
+        ? activeColor.withValues(alpha: isDark ? 0.15 : 0.09)
+        : (AppColors.cardBg(isDark));
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: 42,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: borderColor,
+            width: isActive ? 1.5 : 1.0,
+          ),
+          boxShadow: isActive
+              ? [BoxShadow(color: activeColor.withValues(alpha: 0.12), blurRadius: 8)]
+              : (isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)]),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isActive ? activeColor : inactiveIcon,
+            ),
+            const SizedBox(width: 7),
+            Expanded(
               child: Text(
-                diff,
+                label,
                 style: AppTextStyles.label.copyWith(
-                  fontSize: 12,
+                  fontSize: 12.5,
+                  color: isActive ? activeColor : inactiveText,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive
-                      ? color
-                      : (isDark
-                          ? AppColors.white.withValues(alpha: 0.70)
-                          : AppColors.gray500),
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          );
-        },
+            const SizedBox(width: 4),
+            // Show × when active, ▾ when inactive
+            if (onClear != null)
+              GestureDetector(
+                onTap: onClear,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: Icon(Icons.close_rounded, size: 14, color: activeColor),
+                ),
+              )
+            else
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 17,
+                color: inactiveIcon,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter option bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FilterOptionSheet extends StatelessWidget {
+  final String title;
+  final List<String> items;
+  final String selected;
+  final bool isDark;
+  final ValueChanged<String> onSelect;
+  final String Function(String)? labelBuilder;
+  final Map<String, Color>? tints;
+  final Color Function(String)? colorBuilder;
+
+  const _FilterOptionSheet({
+    required this.title,
+    required this.items,
+    required this.selected,
+    required this.isDark,
+    required this.onSelect,
+    this.labelBuilder,
+    this.tints,
+    this.colorBuilder,
+  });
+
+  Color _colorFor(String item) {
+    if (tints != null) return tints![item] ?? AppColors.brandPurple;
+    if (colorBuilder != null) return colorBuilder!(item);
+    return AppColors.brandPurple;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sheetBg = isDark ? const Color(0xFF131929) : Colors.white;
+    final handleC = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.15);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20, 14, 20, MediaQuery.of(context).padding.bottom + 28,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 38, height: 4,
+              decoration: BoxDecoration(
+                color: handleC,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            title,
+            style: TextStyle(
+              color: AppColors.textPrimary(isDark),
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Options
+          ...items.map((item) {
+            final isSelected = item == selected;
+            final color = _colorFor(item);
+            final displayLabel = labelBuilder != null ? labelBuilder!(item) : item;
+
+            return GestureDetector(
+              onTap: () => onSelect(item),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? color.withValues(alpha: isDark ? 0.18 : 0.10)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isSelected
+                        ? color.withValues(alpha: isDark ? 0.45 : 0.35)
+                        : Colors.transparent,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Color dot
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        displayLabel,
+                        style: TextStyle(
+                          color: isSelected
+                              ? color
+                              : (isDark
+                                  ? Colors.white.withValues(alpha: 0.75)
+                                  : const Color(0xFF374151)),
+                          fontSize: 14,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    if (isSelected)
+                      Icon(Icons.check_circle_rounded, size: 18, color: color),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -672,16 +903,16 @@ class _SkeletonCardState extends State<_SkeletonCard>
     return AnimatedBuilder(
       animation: _anim,
       builder: (_, __) {
-        final base = isDark ? const Color(0xFF1A1F35) : const Color(0xFFE5E7EB);
-        final highlight = isDark ? const Color(0xFF252B47) : const Color(0xFFF3F4F6);
+        final base = isDark ? AppColors.darkCard : AppColors.gray200;
+        final highlight = isDark ? const Color(0xFF252B47) : AppColors.gray100;
         final shimmer = Color.lerp(base, highlight, _anim.value)!;
         return Container(
           height: 180,
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+            color: AppColors.cardBg(isDark),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+              color: AppColors.borderColor(isDark),
             ),
           ),
           padding: const EdgeInsets.all(16),
@@ -764,7 +995,7 @@ class _EmptyState extends StatelessWidget {
               'Không tìm thấy bộ câu hỏi',
               style: AppTextStyles.labelBold.copyWith(
                 fontSize: 16,
-                color: isDark ? AppColors.white : AppColors.nearBlack,
+                color: AppColors.textPrimary(isDark),
               ),
             ),
             const SizedBox(height: 8),
@@ -817,7 +1048,7 @@ class _ErrorState extends StatelessWidget {
               'Không thể tải dữ liệu',
               style: AppTextStyles.labelBold.copyWith(
                 fontSize: 16,
-                color: isDark ? AppColors.white : AppColors.nearBlack,
+                color: AppColors.textPrimary(isDark),
               ),
             ),
             const SizedBox(height: 8),
@@ -852,6 +1083,154 @@ class _ErrorState extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Responsive grid
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pagination bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PaginationBar extends StatelessWidget {
+  final int currentPage;
+  final int totalPages;
+  final bool isDark;
+  final ValueChanged<int> onPageChanged;
+
+  const _PaginationBar({
+    required this.currentPage,
+    required this.totalPages,
+    required this.isDark,
+    required this.onPageChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Build page number buttons — show at most 5 page numbers with ellipsis
+    final pages = <int?>[];
+    if (totalPages <= 7) {
+      for (var i = 0; i < totalPages; i++) pages.add(i);
+    } else {
+      pages.add(0);
+      if (currentPage > 2) pages.add(null); // ellipsis
+      final start = (currentPage - 1).clamp(1, totalPages - 2);
+      final end   = (currentPage + 1).clamp(1, totalPages - 2);
+      for (var i = start; i <= end; i++) pages.add(i);
+      if (currentPage < totalPages - 3) pages.add(null); // ellipsis
+      pages.add(totalPages - 1);
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Prev
+        _NavBtn(
+          icon: Icons.chevron_left_rounded,
+          enabled: currentPage > 0,
+          isDark: isDark,
+          onTap: () => onPageChanged(currentPage - 1),
+        ),
+        const SizedBox(width: 4),
+
+        // Page numbers
+        ...pages.map((p) {
+          if (p == null) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text('…',
+                  style: TextStyle(
+                      color: isDark ? Colors.white38 : Colors.black26,
+                      fontSize: 14)),
+            );
+          }
+          final isActive = p == currentPage;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: GestureDetector(
+              onTap: isActive ? null : () => onPageChanged(p),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? const Color(0xFF6C47FF)
+                      : (isDark
+                          ? AppColors.darkCard
+                          : AppColors.gray100),
+                  borderRadius: BorderRadius.circular(8),
+                  border: isActive
+                      ? null
+                      : Border.all(
+                          color: AppColors.borderColor(isDark)),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${p + 1}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isActive
+                        ? Colors.white
+                        : (isDark ? Colors.white70 : const Color(0xFF374151)),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+
+        const SizedBox(width: 4),
+        // Next
+        _NavBtn(
+          icon: Icons.chevron_right_rounded,
+          enabled: currentPage < totalPages - 1,
+          isDark: isDark,
+          onTap: () => onPageChanged(currentPage + 1),
+        ),
+      ],
+    );
+  }
+}
+
+class _NavBtn extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _NavBtn({
+    required this.icon,
+    required this.enabled,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkCard : AppColors.gray100,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+                color: AppColors.borderColor(isDark)),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: 20,
+            color: enabled
+                ? (isDark ? Colors.white : const Color(0xFF374151))
+                : (isDark ? Colors.white24 : Colors.black12),
+          ),
+        ),
+      );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sets grid
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _SetsGrid extends StatelessWidget {
@@ -951,30 +1330,40 @@ class _QuestionSetCardState extends State<QuestionSetCard> {
         transform: _hovered
             ? (Matrix4.identity()..translate(0.0, -3.0, 0.0))
             : Matrix4.identity(),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: _hovered ? 0.14 : 0.06),
-              blurRadius: _hovered ? 28 : 12,
-              spreadRadius: _hovered ? -2 : -4,
-              offset: Offset(0, _hovered ? 12 : 4),
-            ),
-            if (_hovered)
-              BoxShadow(
-                color: AppColors.brandPurple.withValues(alpha: 0.12),
-                blurRadius: 24,
-                spreadRadius: -6,
-                offset: const Offset(0, 8),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF1A1D2E).withValues(alpha: 0.72)
+                    : const Color(0xFFFFFFFF).withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _hovered
+                      ? AppColors.brandPurple.withValues(alpha: 0.28)
+                      : (isDark
+                          ? Colors.white.withValues(alpha: 0.10)
+                          : const Color(0xFF6C47FF).withValues(alpha: 0.09)),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: _hovered ? 0.18 : 0.08),
+                    blurRadius: _hovered ? 28 : 14,
+                    offset: Offset(0, _hovered ? 12 : 5),
+                  ),
+                  if (_hovered)
+                    BoxShadow(
+                      color: AppColors.brandPurple.withValues(alpha: 0.14),
+                      blurRadius: 22,
+                      offset: const Offset(0, 8),
+                    ),
+                ],
               ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1012,7 +1401,7 @@ class _QuestionSetCardState extends State<QuestionSetCard> {
                           s.title,
                           style: AppTextStyles.labelBold.copyWith(
                             fontSize: 14,
-                            color: isDark ? AppColors.white : AppColors.nearBlack,
+                            color: AppColors.textPrimary(isDark),
                             height: 1.35,
                           ),
                           maxLines: 2,
@@ -1037,20 +1426,22 @@ class _QuestionSetCardState extends State<QuestionSetCard> {
                 ],
               ),
 
-              // ── Description ─────────────────────────────────────────────
-              const SizedBox(height: 10),
-              Text(
-                s.description,
-                style: AppTextStyles.caption.copyWith(
-                  fontSize: 13,
-                  color: isDark
-                      ? AppColors.white.withValues(alpha: 0.55)
-                      : AppColors.gray500,
-                  height: 1.5,
+              // ── Description — skip internal metadata strings ─────────────
+              if (_isValidDescription(s.description)) ...[
+                const SizedBox(height: 10),
+                Text(
+                  s.description,
+                  style: AppTextStyles.caption.copyWith(
+                    fontSize: 13,
+                    color: isDark
+                        ? AppColors.white.withValues(alpha: 0.55)
+                        : AppColors.gray500,
+                    height: 1.5,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+              ],
 
               // ── Skill chips ─────────────────────────────────────────────
               if (s.skills.isNotEmpty) ...[
@@ -1095,11 +1486,14 @@ class _QuestionSetCardState extends State<QuestionSetCard> {
                 onTap: () => context.go('/jobseeker/sets/${s.id}'),
               ),
             ],
-          ),
-        ),
-      ),
-      ),
-    );
+          ),   // Column
+        ),     // Padding
+      ),       // inner AnimatedContainer (decoration)
+    ),         // BackdropFilter
+  ),           // ClipRRect
+),             // outer AnimatedContainer (transform)
+      ),       // MouseRegion
+    );         // GestureDetector
   }
 }
 
@@ -1180,22 +1574,7 @@ class _SkillChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: isDark ? 0.18 : 0.10),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: isDark ? 0.35 : 0.25)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: isDark ? color.withValues(alpha: 0.90) : color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
+    return buildSkillTag(label: label, isDark: isDark, accentColor: color);
   }
 }
 
@@ -1269,6 +1648,16 @@ class _MetaItem extends StatelessWidget {
       ],
     );
   }
+}
+
+// Returns false for internal metadata strings that should never be shown to users
+// (e.g. "STUDIO_SAVE;\nproject=...").
+bool _isValidDescription(String desc) {
+  if (desc.trim().isEmpty) return false;
+  final upper = desc.trimLeft().toUpperCase();
+  if (upper.startsWith('STUDIO_')) return false;
+  if (desc.contains('project=')) return false;
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

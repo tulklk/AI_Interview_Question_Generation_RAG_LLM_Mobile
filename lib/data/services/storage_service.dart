@@ -9,6 +9,7 @@ class StorageService {
   static const _kUserRole       = 'auth_user_role';
   static const _kUserName       = 'auth_user_name';
   static const _kUserEmail      = 'auth_user_email';
+  static const _kAvatarUrl      = 'auth_avatar_url';
   static const _kOnboardingSeen = 'onboarding_seen';
 
   // ── Write ────────────────────────────────────────────────────────────────
@@ -20,6 +21,7 @@ class StorageService {
     required String userRole,
     required String userName,
     required String userEmail,
+    String? avatarUrl,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await Future.wait([
@@ -29,6 +31,10 @@ class StorageService {
       prefs.setString(_kUserRole,     userRole),
       prefs.setString(_kUserName,     userName),
       prefs.setString(_kUserEmail,    userEmail),
+      if (avatarUrl != null && avatarUrl.isNotEmpty)
+        prefs.setString(_kAvatarUrl, avatarUrl)
+      else
+        prefs.remove(_kAvatarUrl),
     ]);
   }
 
@@ -53,6 +59,7 @@ class StorageService {
     final userEmail = prefs.getString(_kUserEmail) ?? '';
     // Treat as no session if any critical field is missing
     if (userId.isEmpty || userName.isEmpty || userEmail.isEmpty) return null;
+    final avatarUrl = prefs.getString(_kAvatarUrl) ?? '';
     return {
       'accessToken':  token,
       'refreshToken': prefs.getString(_kRefreshToken) ?? '',
@@ -60,6 +67,7 @@ class StorageService {
       'userRole':     prefs.getString(_kUserRole)     ?? '',
       'userName':     userName,
       'userEmail':    userEmail,
+      if (avatarUrl.isNotEmpty) 'avatarUrl': avatarUrl,
     };
   }
 
@@ -91,6 +99,7 @@ class StorageService {
       prefs.remove(_kUserRole),
       prefs.remove(_kUserName),
       prefs.remove(_kUserEmail),
+      prefs.remove(_kAvatarUrl),
     ]);
   }
 }

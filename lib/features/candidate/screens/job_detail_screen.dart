@@ -24,7 +24,7 @@ class JobDetailScreen extends ConsumerWidget {
     final matchScore = 75 + (jobId.hashCode % 25).abs();
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
+      backgroundColor: AppColors.surfaceBg(isDark),
       body: CustomScrollView(
         slivers: [
           // Hero header
@@ -37,23 +37,23 @@ class JobDetailScreen extends ConsumerWidget {
               child: Container(
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkCard : Colors.white,
+                  color: AppColors.cardBg(isDark),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(PhosphorIconsBold.arrowLeft, size: 18,
-                  color: isDark ? AppColors.white : AppColors.nearBlack),
+                  color: AppColors.textPrimary(isDark)),
               ),
             ),
             actions: [
               Container(
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkCard : Colors.white,
+                  color: AppColors.cardBg(isDark),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: IconButton(
                   icon: Icon(PhosphorIconsBold.bookmarkSimple, size: 18,
-                    color: isDark ? AppColors.white : AppColors.nearBlack),
+                    color: AppColors.textPrimary(isDark)),
                   onPressed: () {},
                 ),
               ),
@@ -64,7 +64,7 @@ class JobDetailScreen extends ConsumerWidget {
                   gradient: LinearGradient(
                     colors: [
                       AppColors.brandPurple.withOpacity(0.12),
-                      isDark ? AppColors.darkBg : AppColors.offWhite,
+                      AppColors.surfaceBg(isDark),
                     ],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -92,7 +92,7 @@ class JobDetailScreen extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(job.title, style: AppTextStyles.h2.copyWith(
-                                color: isDark ? AppColors.white : AppColors.nearBlack,
+                                color: AppColors.textPrimary(isDark),
                                 fontSize: 20)),
                               const SizedBox(height: 4),
                               Text('FPT Software', style: AppTextStyles.body.copyWith(
@@ -185,7 +185,7 @@ class JobDetailScreen extends ConsumerWidget {
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.darkCard : AppColors.white,
+          color: AppColors.cardBg(isDark),
           border: Border(top: BorderSide(color: AppColors.cardBorder)),
         ),
         child: AppGradientButton(
@@ -207,7 +207,7 @@ class JobDetailScreen extends ConsumerWidget {
       builder: (_) => Container(
         height: MediaQuery.of(ctx).size.height * 0.5,
         decoration: BoxDecoration(
-          color: isDark ? AppColors.darkCard : AppColors.white,
+          color: AppColors.cardBg(isDark),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.all(24),
@@ -239,7 +239,7 @@ class JobDetailScreen extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('My_CV_2024.pdf', style: AppTextStyles.labelBold.copyWith(
-                  color: isDark ? AppColors.white : AppColors.nearBlack)),
+                  color: AppColors.textPrimary(isDark))),
                 Text('Last updated Nov 2024', style: AppTextStyles.caption),
               ])),
               const Icon(PhosphorIconsBold.checkCircle, color: AppColors.success),
@@ -279,7 +279,7 @@ class _DetailSection extends StatelessWidget {
     interactive: false,
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(title, style: AppTextStyles.h4.copyWith(
-        color: isDark ? AppColors.white : AppColors.nearBlack)),
+        color: AppColors.textPrimary(isDark))),
       const SizedBox(height: 14),
       child,
     ]),

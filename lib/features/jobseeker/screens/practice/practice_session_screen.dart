@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/i18n/app_localizations.dart';
+import '../../../../core/widgets/grid_background.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
@@ -48,33 +50,33 @@ class _PracticeColors {
   static const _dark = _PracticeColors._(
     bg:               Color(0xFF080B14),
     card:             Color(0xFF0D1117),
-    border:           Color(0xFF1E2640),
+    border:           AppColors.darkChip,
     muted:            Color(0xFF4A5578),
     primaryText:      Colors.white,
     secondaryText:    Color(0xFF9CAAC4),
-    dotInactive:      Color(0xFF2D3562),
-    nextBtn:          Color(0xFF1A1F35),
-    nextBtnDisabled:  Color(0xFF111827),
+    dotInactive:      AppColors.darkCardBorder,
+    nextBtn:          AppColors.darkCard,
+    nextBtnDisabled:  AppColors.nearBlack,
     hintText:         Color(0xFF4A5578),
     submittedText:    Color(0xFFD1D5DB),
-    dialogBg:         Color(0xFF1A1F35),
-    divider:          Color(0xFF1E2640),
+    dialogBg:         AppColors.darkCard,
+    divider:          AppColors.darkChip,
   );
 
   static const _light = _PracticeColors._(
-    bg:               Color(0xFFF8FAFC),
+    bg:               AppColors.surfaceLight,
     card:             Colors.white,
-    border:           Color(0xFFE5E7EB),
+    border:           AppColors.gray200,
     muted:            Color(0xFF9CA3AF),
-    primaryText:      Color(0xFF111827),
+    primaryText:      AppColors.nearBlack,
     secondaryText:    Color(0xFF6B7280),
     dotInactive:      Color(0xFFD1D5DB),
-    nextBtn:          Color(0xFFF3F4F6),
-    nextBtnDisabled:  Color(0xFFE5E7EB),
+    nextBtn:          AppColors.gray100,
+    nextBtnDisabled:  AppColors.gray200,
     hintText:         Color(0xFF9CA3AF),
     submittedText:    Color(0xFF374151),
     dialogBg:         Colors.white,
-    divider:          Color(0xFFE5E7EB),
+    divider:          AppColors.gray200,
   );
 }
 
@@ -98,6 +100,7 @@ class _PracticeSessionScreenState
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_exitDialogOpen) return; // freeze while exit confirm is open
       final st = ref.read(practiceSessionProvider(widget.setId));
       if (!st.evaluating) {
         ref.read(practiceSessionProvider(widget.setId).notifier).tick();
@@ -111,14 +114,54 @@ class _PracticeSessionScreenState
     super.dispose();
   }
 
+  // ── Exit overlay (no showDialog — avoids Navigator lifecycle conflicts) ─────
+  //
+  // Root cause of all _ElementLifecycle.inactive crashes: showDialog pushes a
+  // route onto the same Navigator that go_router manages. When context.go()
+  // replaces the route stack, the navigator processes two operations at once
+  // (dialog pop + page replacement) → elements activate/deactivate out of order.
+  //
+  // Fix: render the "dialog" as a Stack overlay INSIDE the practice screen's
+  // own widget tree. context.go() then removes the entire screen (scaffold +
+  // overlay) in one atomic operation — no navigator conflict.
+
   void _showExitDialog() {
     if (_exitDialogOpen) return;
-    _exitDialogOpen = true;
-    showDialog<void>(
-      context: context,
-      builder: (_) => _ExitDialog(setId: widget.setId),
-    ).then((_) => _exitDialogOpen = false);
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _exitDialogOpen = true);
   }
+
+  void _closeExitDialog() {
+    if (mounted) setState(() => _exitDialogOpen = false);
+  }
+
+  /// Close overlay first, then pop (or go fallback) on the next frame.
+  void _leaveToSetDetail({required bool cancelSession}) {
+    _timer?.cancel();
+    _timer = null;
+    if (_exitDialogOpen) setState(() => _exitDialogOpen = false);
+
+    final router = GoRouter.of(context);
+    final setId = widget.setId;
+    final canPop = Navigator.of(context).canPop();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (cancelSession) {
+        ref.invalidate(inProgressSessionProvider(setId));
+        ref.invalidate(allInProgressSessionsProvider);
+      }
+      if (canPop) {
+        router.pop();
+      } else {
+        router.go('/jobseeker/sets/$setId');
+      }
+    });
+  }
+
+  void _handleSaveAndExit() => _leaveToSetDetail(cancelSession: false);
+
+  void _handleCancelSession() => _leaveToSetDetail(cancelSession: true);
 
   @override
   Widget build(BuildContext context) {
@@ -128,12 +171,15 @@ class _PracticeSessionScreenState
     final notifier = ref.read(practiceSessionProvider(widget.setId).notifier);
     final l10n    = context.l10n;
 
-    // Navigate to result when session completes
+    // Navigate to result when session completes.
+    // Use serverSessionId (not setId) so the result screen can call
+    // /practice-sessions/:sessionId/feedback directly — no extra lookup.
     ref.listen<PracticeSessionState>(
       practiceSessionProvider(widget.setId),
       (prev, next) {
         if (next.isComplete && !(prev?.isComplete ?? false)) {
-          context.go('/jobseeker/practice/${widget.setId}/result');
+          final sessionId = next.serverSessionId ?? widget.setId;
+          context.go('/jobseeker/practice/$sessionId/result');
         }
       },
     );
@@ -281,7 +327,20 @@ class _PracticeSessionScreenState
     final isSubmitted = state.submitted[currentQ.id] == true;
     final currentAnswer = state.answers[currentQ.id] ?? '';
 
-    return Scaffold(
+    // Stack-based overlay — see _showExitDialog() comment for why we avoid
+    // showDialog here. Android back: if overlay is open → close it ("Ở lại");
+    // otherwise → open it (never pop the route directly, spec §8 E1).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          if (_exitDialogOpen) _closeExitDialog();
+          else _showExitDialog();
+        }
+      },
+      child: Stack(
+        children: [
+      Scaffold(
       backgroundColor: colors.bg,
       appBar: AppBar(
         backgroundColor: colors.bg,
@@ -289,7 +348,7 @@ class _PracticeSessionScreenState
         surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
         titleSpacing: 12,
-        title: _AppBarTitle(state: state, colors: colors),
+        title: _AppBarTitle(setId: widget.setId, state: state, colors: colors),
         actions: [
           _TimerDisplay(timeLeft: state.timeLeft, colors: colors),
           IconButton(
@@ -307,7 +366,8 @@ class _PracticeSessionScreenState
           ),
         ),
       ),
-      body: Column(
+      body: GridBackdrop(
+        child: Column(
         children: [
           Expanded(
             child: SingleChildScrollView(
@@ -321,11 +381,14 @@ class _PracticeSessionScreenState
                     _EvaluatingWidget(l10n: l10n, colors: colors)
                   else if (isSubmitted)
                     _SubmittedWidget(
-                        answer: currentAnswer, l10n: l10n, colors: colors)
+                        answer: currentAnswer,
+                        isCode: currentQ.needsCodeAnswer,
+                        l10n: l10n,
+                        colors: colors)
                   else
                     _AnswerInput(
                       key: ValueKey(currentQ.id),
-                      questionId: currentQ.id,
+                      question: currentQ,
                       initialValue: currentAnswer,
                       onChanged: (v) =>
                           notifier.updateAnswer(currentQ.id, v),
@@ -358,34 +421,65 @@ class _PracticeSessionScreenState
           ),
         ],
       ),
-    );
+      ),
+      ), // Scaffold — first child of Stack
+          // ── Exit overlay ───────────────────────────────────────────────────
+          if (_exitDialogOpen)
+            _ExitOverlay(
+              onStay: _closeExitDialog,
+              onSaveAndExit: _handleSaveAndExit,
+              onCancelSession: _handleCancelSession,
+            ),
+        ], // Stack children
+      ), // Stack
+    ); // PopScope
   }
 }
 
 // ── AppBar title ──────────────────────────────────────────────────────────────
 
-class _AppBarTitle extends StatelessWidget {
+class _AppBarTitle extends ConsumerWidget {
+  final String setId;
   final PracticeSessionState state;
   final _PracticeColors colors;
-  const _AppBarTitle({required this.state, required this.colors});
+  const _AppBarTitle({
+    required this.setId,
+    required this.state,
+    required this.colors,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final set = ref.watch(setDetailProvider(setId)).maybeWhen(
+          data: (s) => s,
+          orElse: () => null,
+        );
+    final title = (set != null && set.title.trim().isNotEmpty)
+        ? set.title
+        : 'Phiên luyện tập';
+    final logoUrl = set?.companyLogo;
+    final initials = set?.companyInitials ?? 'P';
+    final companyColor = set?.companyColor ?? _kPrimary;
+
     return Row(
       children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: _kPrimary,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Center(
-            child: Text('P',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700)),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: logoUrl != null && logoUrl.isNotEmpty
+                ? Image.network(
+                    logoUrl,
+                    width: 32,
+                    height: 32,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _LogoFallback(
+                      initials: initials,
+                      color: companyColor,
+                    ),
+                  )
+                : _LogoFallback(initials: initials, color: companyColor),
           ),
         ),
         const SizedBox(width: 8),
@@ -394,7 +488,7 @@ class _AppBarTitle extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Phiên luyện tập',
+                title,
                 style: TextStyle(
                     color: colors.primaryText,
                     fontSize: 13,
@@ -411,6 +505,31 @@ class _AppBarTitle extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LogoFallback extends StatelessWidget {
+  final String initials;
+  final Color color;
+  const _LogoFallback({required this.initials, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 32,
+      height: 32,
+      color: color,
+      child: Center(
+        child: Text(
+          initials.isNotEmpty ? initials[0].toUpperCase() : 'P',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -496,8 +615,11 @@ class _QuestionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final catColor = categoryColor(question.category);
-    final difColor = difficultyColor(question.difficulty);
+    final catColor  = categoryColor(question.category);
+    final difColor  = difficultyColor(question.difficulty);
+    final isDark    = colors.bg == const Color(0xFF080B14);
+    final hasSnippet = (question.codeSnippet?.trim().isNotEmpty ?? false);
+    final isCode    = question.needsCodeAnswer;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -505,7 +627,7 @@ class _QuestionCard extends StatelessWidget {
         color: colors.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: colors.border),
-        boxShadow: colors.bg == const Color(0xFFF8FAFC)
+        boxShadow: colors.bg == AppColors.surfaceLight
             ? [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
@@ -522,13 +644,37 @@ class _QuestionCard extends StatelessWidget {
             children: [
               _Pill(label: categoryLabel(question.category), color: catColor),
               const SizedBox(width: 8),
-              _Pill(
-                  label: difficultyLabel(question.difficulty),
-                  color: difColor),
+              _Pill(label: difficultyLabel(question.difficulty), color: difColor),
+              if (isCode) ...[
+                const SizedBox(width: 8),
+                _Pill(label: 'Code', color: const Color(0xFF06B6D4)),
+              ],
             ],
           ),
           const SizedBox(height: 14),
           _QuestionText(text: question.text, colors: colors),
+          // Code snippet block (only when not locked)
+          if (hasSnippet && !question.isLocked) ...[
+            const SizedBox(height: 12),
+            _CodeSnippetView(
+              snippet: question.codeSnippet!,
+              lang: question.codeTemplateType?.toLowerCase(),
+              isDark: isDark,
+              colors: colors,
+            ),
+          ],
+          // Attached image (only when not locked)
+          if ((question.attachedImageUrl?.isNotEmpty ?? false) && !question.isLocked) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(
+                question.attachedImageUrl!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -616,7 +762,7 @@ class _CodeBlock extends StatelessWidget {
         color: isDark ? const Color(0xFF0A0E1A) : const Color(0xFF1E1E2E),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isDark ? const Color(0xFF2D3562) : const Color(0xFF374151),
+          color: isDark ? AppColors.darkCardBorder : const Color(0xFF374151),
         ),
       ),
       child: Column(
@@ -627,7 +773,7 @@ class _CodeBlock extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A1F35) : const Color(0xFF2D3748),
+                color: isDark ? AppColors.darkCard : const Color(0xFF2D3748),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(10),
                   topRight: Radius.circular(10),
@@ -649,7 +795,7 @@ class _CodeBlock extends StatelessWidget {
             child: Text(
               code,
               style: const TextStyle(
-                color: Color(0xFFE5E7EB),
+                color: AppColors.gray200,
                 fontSize: 13,
                 fontFamily: 'monospace',
                 height: 1.65,
@@ -663,10 +809,95 @@ class _CodeBlock extends StatelessWidget {
   }
 }
 
-// ── Answer input ──────────────────────────────────────────────────────────────
+// ── Code snippet display (read-only, horizontally scrollable) ─────────────────
+
+class _CodeSnippetView extends StatelessWidget {
+  final String snippet;
+  final String? lang;
+  final bool isDark;
+  final _PracticeColors colors;
+
+  const _CodeSnippetView({
+    required this.snippet,
+    this.lang,
+    required this.isDark,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = normalizeCodeEscapes(snippet);
+    // Pick a readable label: "ĐỀ BÀI / {LANG}" matching web design
+    final langLabel = lang != null && lang!.isNotEmpty
+        ? 'ĐỀ BÀI / ${lang!.toUpperCase()}'
+        : 'ĐỀ BÀI';
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0A0E1A) : const Color(0xFF1E1E2E),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? AppColors.darkCardBorder : const Color(0xFF374151),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header strip
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0D1117) : const Color(0xFF2D3748),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(10),
+                topRight: Radius.circular(10),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.code_rounded,
+                    size: 13, color: Color(0xFF9CA3AF)),
+                const SizedBox(width: 6),
+                Text(
+                  langLabel,
+                  style: const TextStyle(
+                    color: Color(0xFF9CA3AF),
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Scrollable code body
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(14),
+            child: SelectableText(
+              normalized,
+              style: const TextStyle(
+                color: Color(0xFFD1D5DB),
+                fontSize: 13,
+                fontFamily: 'monospace',
+                height: 1.65,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Answer input (branches on needsCodeAnswer) ────────────────────────────────
 
 class _AnswerInput extends StatefulWidget {
-  final String questionId;
+  final PracticeQuestion question;
   final String initialValue;
   final ValueChanged<String> onChanged;
   final VoidCallback onSubmit;
@@ -675,7 +906,7 @@ class _AnswerInput extends StatefulWidget {
 
   const _AnswerInput({
     super.key,
-    required this.questionId,
+    required this.question,
     required this.initialValue,
     required this.onChanged,
     required this.onSubmit,
@@ -689,13 +920,21 @@ class _AnswerInput extends StatefulWidget {
 
 class _AnswerInputState extends State<_AnswerInput> {
   late final TextEditingController _ctrl;
+  String? _validationError;
+
+  bool get _isCode => widget.question.needsCodeAnswer;
 
   @override
   void initState() {
     super.initState();
     _ctrl = TextEditingController(text: widget.initialValue);
     _ctrl.addListener(() {
-      setState(() {});
+      setState(() {
+        // Clear validation error as user types
+        if (_validationError != null && _ctrl.text.trim().length >= kMinAnswerChars) {
+          _validationError = null;
+        }
+      });
       widget.onChanged(_ctrl.text);
     });
   }
@@ -706,11 +945,140 @@ class _AnswerInputState extends State<_AnswerInput> {
     super.dispose();
   }
 
+  void _handleSubmit() {
+    final errorKey = validateAnswerText(_ctrl.text, isCode: _isCode);
+    if (errorKey != null) {
+      setState(() {
+        _validationError = errorKey == 'validationTooShort'
+            ? widget.l10n.validationTooShort
+            : widget.l10n.validationTooFewWords;
+      });
+      return;
+    }
+    widget.onSubmit();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c       = widget.colors;
-    final len     = _ctrl.text.length;
-    final isEmpty = _ctrl.text.trim().isEmpty;
+    // Free-tier lock — show upsell block instead of input
+    if (widget.question.isLocked && _isCode) {
+      return _LockedCodeBlock(l10n: widget.l10n, colors: widget.colors);
+    }
+
+    return _isCode
+        ? _CodeAnswerField(
+            ctrl: _ctrl,
+            validationError: _validationError,
+            onSubmit: _handleSubmit,
+            l10n: widget.l10n,
+            colors: widget.colors,
+          )
+        : _TextAnswerField(
+            ctrl: _ctrl,
+            validationError: _validationError,
+            onSubmit: _handleSubmit,
+            l10n: widget.l10n,
+            colors: widget.colors,
+          );
+  }
+}
+
+// ── Locked code block (Free-tier upsell) ─────────────────────────────────────
+
+class _LockedCodeBlock extends StatelessWidget {
+  final AppLocalizations l10n;
+  final _PracticeColors colors;
+  const _LockedCodeBlock({required this.l10n, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1C1040), Color(0xFF2D1B69)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF7C5CFC).withValues(alpha: 0.4),
+        ),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.lock_rounded, color: Color(0xFFFFD700), size: 32),
+          const SizedBox(height: 12),
+          Text(
+            l10n.lockedQuestionTitle,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            l10n.lockedQuestionBody,
+            style: const TextStyle(
+              color: Color(0xFFD1D5DB),
+              fontSize: 13,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => context.go('/jobseeker/subscription'),
+              icon: const Icon(Icons.workspace_premium_rounded,
+                  size: 16, color: Colors.white),
+              label: Text(
+                l10n.upgradeToPremium,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7C5CFC),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                elevation: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Text answer field ─────────────────────────────────────────────────────────
+
+class _TextAnswerField extends StatelessWidget {
+  final TextEditingController ctrl;
+  final String? validationError;
+  final VoidCallback onSubmit;
+  final AppLocalizations l10n;
+  final _PracticeColors colors;
+
+  const _TextAnswerField({
+    required this.ctrl,
+    required this.validationError,
+    required this.onSubmit,
+    required this.l10n,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c       = colors;
+    final len     = ctrl.text.length;
+    final isEmpty = ctrl.text.trim().isEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -719,8 +1087,12 @@ class _AnswerInputState extends State<_AnswerInput> {
           decoration: BoxDecoration(
             color: c.card,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: c.border),
-            boxShadow: c.bg == const Color(0xFFF8FAFC)
+            border: Border.all(
+              color: validationError != null
+                  ? const Color(0xFFEF4444)
+                  : c.border,
+            ),
+            boxShadow: c.bg == AppColors.surfaceLight
                 ? [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.04),
@@ -731,66 +1103,371 @@ class _AnswerInputState extends State<_AnswerInput> {
                 : null,
           ),
           child: TextField(
-            controller: _ctrl,
+            controller: ctrl,
             maxLines: 8,
             minLines: 5,
             style: TextStyle(
                 color: c.primaryText, fontSize: 14, height: 1.6),
             cursorColor: _kPrimary,
             decoration: InputDecoration(
-              hintText: widget.l10n.answerPlaceholder,
-              hintStyle:
-                  TextStyle(color: c.hintText, fontSize: 14),
+              hintText: l10n.answerPlaceholder,
+              hintStyle: TextStyle(color: c.hintText, fontSize: 14),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.all(16),
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
+        if (validationError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              validationError!,
+              style: const TextStyle(
+                  color: Color(0xFFEF4444), fontSize: 12),
+            ),
+          ),
         Text(
-          widget.l10n.charsCount(len) +
-              (len >= 150 ? '' : widget.l10n.charsRecommended),
+          l10n.charsCount(len) +
+              (len >= 150 ? '' : l10n.charsRecommended),
           style: TextStyle(
             color: len >= 150 ? const Color(0xFF10B981) : c.muted,
             fontSize: 12,
           ),
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: Container(
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: isEmpty
-                  ? null
-                  : const LinearGradient(
-                      colors: [Color(0xFF7C3AED), Color(0xFF6C47FF)]),
-              color: isEmpty ? c.nextBtn : null,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: ElevatedButton.icon(
-              onPressed: isEmpty ? null : widget.onSubmit,
-              icon: Icon(Icons.send_rounded,
-                  size: 16, color: isEmpty ? c.muted : Colors.white),
-              label: Text(
-                widget.l10n.submitAnswer,
-                style: TextStyle(
-                  color: isEmpty ? c.muted : Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                disabledBackgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ),
+        _SubmitButton(
+          isEmpty: isEmpty,
+          onSubmit: onSubmit,
+          l10n: l10n,
+          colors: c,
         ),
       ],
+    );
+  }
+}
+
+// ── Code answer field ─────────────────────────────────────────────────────────
+
+class _CodeAnswerField extends StatefulWidget {
+  final TextEditingController ctrl;
+  final String? validationError;
+  final VoidCallback onSubmit;
+  final AppLocalizations l10n;
+  final _PracticeColors colors;
+
+  const _CodeAnswerField({
+    required this.ctrl,
+    required this.validationError,
+    required this.onSubmit,
+    required this.l10n,
+    required this.colors,
+  });
+
+  @override
+  State<_CodeAnswerField> createState() => _CodeAnswerFieldState();
+}
+
+class _CodeAnswerFieldState extends State<_CodeAnswerField> {
+  final _focusNode = FocusNode();
+
+  static const _kToolbarSymbols = [
+    '{', '}', '[', ']', '(', ')',
+    '<', '>', ';', '=', '"', "'", '`',
+  ];
+
+  void _insertText(String s) {
+    final ctrl   = widget.ctrl;
+    final sel    = ctrl.selection;
+    final text   = ctrl.text;
+    final start  = sel.start.clamp(0, text.length);
+    final end    = sel.end.clamp(0, text.length);
+    final newText = text.replaceRange(start, end, s);
+    ctrl.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + s.length),
+    );
+  }
+
+  void _insertTab() => _insertText('    ');
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c      = widget.colors;
+    final isDark = c.bg == const Color(0xFF080B14);
+    final len    = widget.ctrl.text.length;
+    final isEmpty = widget.ctrl.text.trim().isEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Label
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              const Icon(Icons.terminal_rounded,
+                  size: 14, color: Color(0xFF06B6D4)),
+              const SizedBox(width: 6),
+              Text(
+                widget.l10n.codeAnswerLabel,
+                style: const TextStyle(
+                  color: Color(0xFF06B6D4),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Code text field
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0A0E1A) : const Color(0xFF1E1E2E),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: widget.validationError != null
+                  ? const Color(0xFFEF4444)
+                  : isDark
+                      ? AppColors.darkCardBorder
+                      : const Color(0xFF374151),
+            ),
+          ),
+          child: Column(
+            children: [
+              // Keyboard toolbar
+              _CodeKeyboardToolbar(
+                isDark: isDark,
+                symbols: _kToolbarSymbols,
+                onSymbol: _insertText,
+                onTab: _insertTab,
+              ),
+              // Text input
+              TextField(
+                controller: widget.ctrl,
+                focusNode: _focusNode,
+                maxLines: null,
+                minLines: 8,
+                // ── Mobile keyboard hardening ──
+                autocorrect: false,
+                enableSuggestions: false,
+                spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+                smartDashesType: SmartDashesType.disabled,
+                smartQuotesType: SmartQuotesType.disabled,
+                textCapitalization: TextCapitalization.none,
+                keyboardType: TextInputType.multiline,
+                // ── Style ──────────────────────
+                style: const TextStyle(
+                  color: Color(0xFFD1D5DB),
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  height: 1.65,
+                  letterSpacing: 0.2,
+                ),
+                cursorColor: const Color(0xFF06B6D4),
+                decoration: InputDecoration(
+                  hintText: widget.l10n.codeAnswerPlaceholder,
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF4A5578),
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    height: 1.65,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(14),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 6),
+        if (widget.validationError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              widget.validationError!,
+              style: const TextStyle(
+                  color: Color(0xFFEF4444), fontSize: 12),
+            ),
+          ),
+        Text(
+          widget.l10n.charsCount(len),
+          style: TextStyle(
+            color: len >= kMinAnswerChars ? const Color(0xFF10B981) : c.muted,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _SubmitButton(
+          isEmpty: isEmpty,
+          onSubmit: widget.onSubmit,
+          l10n: widget.l10n,
+          colors: c,
+        ),
+      ],
+    );
+  }
+}
+
+// ── Mobile keyboard toolbar for code symbols ──────────────────────────────────
+
+class _CodeKeyboardToolbar extends StatelessWidget {
+  final bool isDark;
+  final List<String> symbols;
+  final ValueChanged<String> onSymbol;
+  final VoidCallback onTab;
+
+  const _CodeKeyboardToolbar({
+    required this.isDark,
+    required this.symbols,
+    required this.onSymbol,
+    required this.onTab,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg      = isDark ? const Color(0xFF0D1117) : const Color(0xFF2D3748);
+    final btnBg   = isDark ? const Color(0xFF1A2035) : const Color(0xFF374151);
+    final btnText = const Color(0xFFD1D5DB);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.only(
+          topLeft:  Radius.circular(12),
+          topRight: Radius.circular(12),
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? AppColors.darkCardBorder : const Color(0xFF4B5563),
+          ),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // Symbol buttons
+            ...symbols.map((sym) => _ToolbarKey(
+              label: sym,
+              bg: btnBg,
+              textColor: btnText,
+              onTap: () => onSymbol(sym),
+            )),
+            const SizedBox(width: 6),
+            // Tab button
+            _ToolbarKey(
+              label: '⇥ Tab',
+              bg: btnBg,
+              textColor: const Color(0xFF06B6D4),
+              onTap: onTab,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolbarKey extends StatelessWidget {
+  final String label;
+  final Color bg;
+  final Color textColor;
+  final VoidCallback onTap;
+  const _ToolbarKey({
+    required this.label,
+    required this.bg,
+    required this.textColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 12,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Shared submit button ──────────────────────────────────────────────────────
+
+class _SubmitButton extends StatelessWidget {
+  final bool isEmpty;
+  final VoidCallback onSubmit;
+  final AppLocalizations l10n;
+  final _PracticeColors colors;
+
+  const _SubmitButton({
+    required this.isEmpty,
+    required this.onSubmit,
+    required this.l10n,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
+    return SizedBox(
+      width: double.infinity,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          gradient: isEmpty
+              ? null
+              : const LinearGradient(
+                  colors: [Color(0xFF7C3AED), Color(0xFF6C47FF)]),
+          color: isEmpty ? c.nextBtn : null,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: ElevatedButton.icon(
+          onPressed: isEmpty ? null : onSubmit,
+          icon: Icon(Icons.send_rounded,
+              size: 16, color: isEmpty ? c.muted : Colors.white),
+          label: Text(
+            l10n.submitAnswer,
+            style: TextStyle(
+              color: isEmpty ? c.muted : Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -833,14 +1510,21 @@ class _EvaluatingWidget extends StatelessWidget {
 
 class _SubmittedWidget extends StatelessWidget {
   final String answer;
+  final bool isCode;
   final AppLocalizations l10n;
   final _PracticeColors colors;
 
-  const _SubmittedWidget(
-      {required this.answer, required this.l10n, required this.colors});
+  const _SubmittedWidget({
+    required this.answer,
+    required this.isCode,
+    required this.l10n,
+    required this.colors,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = colors.bg == const Color(0xFF080B14);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -868,11 +1552,37 @@ class _SubmittedWidget extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            answer,
-            style: TextStyle(
-                color: colors.submittedText, fontSize: 14, height: 1.6),
-          ),
+          if (isCode)
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0A0E1A) : const Color(0xFF1E1E2E),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark ? AppColors.darkCardBorder : const Color(0xFF374151),
+                ),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  answer,
+                  style: const TextStyle(
+                    color: Color(0xFFD1D5DB),
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    height: 1.65,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            )
+          else
+            Text(
+              answer,
+              style: TextStyle(
+                  color: colors.submittedText, fontSize: 14, height: 1.6),
+            ),
         ],
       ),
     );
@@ -1131,52 +1841,253 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
-// ── Exit dialog ───────────────────────────────────────────────────────────────
+// ── Exit overlay ──────────────────────────────────────────────────────────────
+//
+// Rendered as a Stack child inside PracticeSessionScreen — NOT via showDialog.
+// This removes all navigator interactions: onStay/onSaveAndExit/onCancelSession
+// are callbacks that setState or context.go() on the PARENT screen directly.
+// When context.go() fires, go_router removes the entire screen (scaffold +
+// this overlay) in one atomic operation — no _ElementLifecycle.inactive.
 
-class _ExitDialog extends StatelessWidget {
-  final String setId;
-  const _ExitDialog({required this.setId});
+class _ExitOverlay extends StatefulWidget {
+  final VoidCallback onStay;
+  final VoidCallback onSaveAndExit;
+  final VoidCallback onCancelSession;
+
+  const _ExitOverlay({
+    required this.onStay,
+    required this.onSaveAndExit,
+    required this.onCancelSession,
+  });
+
+  @override
+  State<_ExitOverlay> createState() => _ExitOverlayState();
+}
+
+class _ExitOverlayState extends State<_ExitOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _fade;
+  late final Animation<double> _scale;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 300));
+    _fade  = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _scale = Tween<double>(begin: 0.90, end: 1.0).animate(
+        CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
+    _slide = Tween<Offset>(
+            begin: const Offset(0, 0.05), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark  = Theme.of(context).brightness == Brightness.dark;
-    final colors  = _PracticeColors.of(isDark);
-    final l10n    = context.l10n;
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final bg       = isDark ? const Color(0xFF111827) : Colors.white;
+    final border   = isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB);
+    final mutedCol = isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
+    final bodyCol  = isDark ? const Color(0xFFD1D5DB) : const Color(0xFF374151);
+    final titleCol = isDark ? Colors.white : const Color(0xFF111827);
 
-    return AlertDialog(
-      backgroundColor: colors.dialogBg,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      title: Text(
-        l10n.exitPractice,
-        style: TextStyle(
-            color: colors.primaryText,
-            fontSize: 16,
-            fontWeight: FontWeight.w700),
+    // SelectionContainer.disabled cancels selection scope from parent.
+    // DefaultTextStyle.merge forces decoration:none so no yellow underlines
+    // bleed from any ancestor SelectableText / SelectionArea widget.
+    return DefaultTextStyle.merge(
+      style: const TextStyle(
+        decoration:      TextDecoration.none,
+        decorationColor: Colors.transparent,
       ),
-      content: Text(
-        l10n.exitPracticeBody,
-        style: TextStyle(
-            color: colors.muted, fontSize: 14, height: 1.5),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.stay,
-              style: TextStyle(color: colors.muted)),
-        ),
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-            context.go('/jobseeker/sets/$setId');
-          },
-          child: Text(
-            l10n.exit,
-            style: const TextStyle(
-                color: Color(0xFFEF4444), fontWeight: FontWeight.w700),
+      child: SelectionContainer.disabled(
+      child: FadeTransition(
+        opacity: _fade,
+        child: GestureDetector(
+          onTap: widget.onStay,
+          child: ColoredBox(
+            color: Colors.black.withValues(alpha: 0.55),
+            child: Center(
+              child: SlideTransition(
+                position: _slide,
+                child: ScaleTransition(
+                  scale: _scale,
+                  child: GestureDetector(
+                    onTap: () {},
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: bg,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: border),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                  alpha: isDark ? 0.5 : 0.15),
+                              blurRadius: 40,
+                              offset: const Offset(0, 16),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // ── Header ───────────────────────────────────
+                            Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 20, 14, 0),
+                              child: Row(
+                                children: [
+                                  // Warning icon badge
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEF4444)
+                                          .withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                        Icons.warning_amber_rounded,
+                                        size: 20,
+                                        color: Color(0xFFEF4444)),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Thoát buổi luyện tập?',
+                                      style: TextStyle(
+                                        color: titleCol,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                  ),
+                                  // X close
+                                  GestureDetector(
+                                    onTap: widget.onStay,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Icon(Icons.close_rounded,
+                                          size: 20, color: mutedCol),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // ── Body text ─────────────────────────────────
+                            Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 14, 20, 20),
+                              child: Text(
+                                'Bạn có thể tiếp tục phiên này sau. Câu trả lời đã gõ được giữ nháp trên thiết bị này (và có thể đã đồng bộ lên server khi bạn chuyển câu). Chỉ khi bấm Nộp bài thì AI mới chấm điểm.',
+                                style: TextStyle(
+                                  color: bodyCol,
+                                  fontSize: 13.5,
+                                  height: 1.6,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+
+                            Divider(height: 1, color: border),
+
+                            // ── Buttons ───────────────────────────────────
+                            Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                              child: Row(
+                                children: [
+                                  // Ở lại
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: widget.onStay,
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF111827),
+                                        side:
+                                            BorderSide(color: border, width: 1.5),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14)),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 15),
+                                      ),
+                                      child: const Text('Ở lại',
+                                          style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  // Lưu & Thoát
+                                  Expanded(
+                                    child: FilledButton(
+                                      onPressed: widget.onSaveAndExit,
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFFEF4444),
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14)),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 15),
+                                      ),
+                                      child: const Text('Lưu & Thoát',
+                                          style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // ── Hủy phiên link ────────────────────────────
+                            GestureDetector(
+                              onTap: widget.onCancelSession,
+                              behavior: HitTestBehavior.opaque,
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                                child: Text(
+                                  'Hủy phiên này luôn (tiến trình sẽ không được lưu)',
+                                  style: TextStyle(
+                                    color: const Color(0xFFEF4444)
+                                        .withValues(alpha: 0.85),
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
-      ],
-    );
+      ),
+      ), // SelectionContainer.disabled
+    ); // DefaultTextStyle.merge
   }
 }
 

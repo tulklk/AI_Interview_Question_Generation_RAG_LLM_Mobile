@@ -77,16 +77,16 @@ class _PracticeQuestionScreenState
     final progress = practice.progress;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
+      backgroundColor: AppColors.surfaceBg(isDark),
       appBar: AppBar(
-        backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
+        backgroundColor: AppColors.surfaceBg(isDark),
         elevation: 0,
         leading: GestureDetector(
           onTap: () => context.pop(),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkCard : AppColors.white,
+              color: AppColors.cardBg(isDark),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: isDark
@@ -104,7 +104,7 @@ class _PracticeQuestionScreenState
             child: Icon(
               PhosphorIconsBold.x,
               size: 18,
-              color: isDark ? AppColors.white : AppColors.nearBlack,
+              color: AppColors.textPrimary(isDark),
             ),
           ),
         ),
@@ -123,7 +123,7 @@ class _PracticeQuestionScreenState
             padding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkCard : AppColors.white,
+              color: AppColors.cardBg(isDark),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: AppColors.amber.withValues(alpha: 0.30),
@@ -212,7 +212,7 @@ class _PracticeQuestionScreenState
                     q.question,
                     style: AppTextStyles.h4.copyWith(
                       color:
-                          isDark ? AppColors.white : AppColors.nearBlack,
+                          AppColors.textPrimary(isDark),
                       height: 1.5,
                       fontWeight: FontWeight.w600,
                     ),
@@ -471,7 +471,7 @@ class _FeedbackScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
+      backgroundColor: AppColors.surfaceBg(isDark),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -606,7 +606,7 @@ class _FeedbackScreen extends StatelessWidget {
                         'Strengths',
                         style: AppTextStyles.labelBold.copyWith(
                           color:
-                              isDark ? AppColors.white : AppColors.nearBlack,
+                              AppColors.textPrimary(isDark),
                         ),
                       ),
                     ]),

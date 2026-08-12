@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/generation_repository.dart';
 import '../../domain/enums/generation_status.dart';
 import '../../domain/models/generation_session.dart';
-import 'generation_provider.dart';
+import 'generation_provider.dart' show GenStorage, generationRepositoryProvider;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -113,25 +113,6 @@ class BadgeNotifier extends StateNotifier<BadgeState> {
       _managePolling(state.jobId, state.currentView, state.pollingPhase,
           state.isDismissed);
     }
-  }
-
-  /// Mirrors generation state without an extra API call.
-  void syncFromGenerationState(GenerationState gen) {
-    if (gen.jobId == null || gen.jobId!.isEmpty || gen.currentView == 'form') {
-      return;
-    }
-    if (state.jobId == gen.jobId &&
-        state.currentView == gen.currentView &&
-        state.pollingPhase == gen.pollingPhase &&
-        state.session?.rawPhase == gen.session?.rawPhase) {
-      return;
-    }
-    state = state.copyWith(
-      jobId:        gen.jobId,
-      currentView:  gen.currentView,
-      pollingPhase: gen.pollingPhase,
-      session:      gen.session,
-    );
   }
 
   void _scheduleSync(Duration delay) {
@@ -259,19 +240,5 @@ class BadgeNotifier extends StateNotifier<BadgeState> {
 
 final badgeProvider =
     StateNotifierProvider<BadgeNotifier, BadgeState>((ref) {
-  final notifier = BadgeNotifier(ref.watch(generationRepositoryProvider));
-
-  ref.listen<GenerationState>(generationProvider, (prev, next) {
-    if (prev?.currentView != next.currentView ||
-        prev?.jobId != next.jobId ||
-        prev?.pollingPhase != next.pollingPhase ||
-        prev?.session?.rawPhase != next.session?.rawPhase) {
-      scheduleMicrotask(() {
-        notifier.syncFromGenerationState(next);
-        notifier.syncNow();
-      });
-    }
-  });
-
-  return notifier;
+  return BadgeNotifier(ref.watch(generationRepositoryProvider));
 });

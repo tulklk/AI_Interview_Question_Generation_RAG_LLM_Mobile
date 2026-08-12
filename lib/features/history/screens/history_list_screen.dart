@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/i18n/app_localizations.dart';
 import '../../hr_generate/data/generation_api.dart';
-import '../../hr_generate/presentation/providers/generation_provider.dart';
+import '../../hr_generate/data/studio_repository.dart';
+import '../../hr_generate/domain/models/studio_models.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ class HistorySession {
   final int? questionCount;
   final String? questionSetId;
   final bool isPublished;
+  final bool isBookmarked;
 
   const HistorySession({
     required this.id,
@@ -32,10 +34,11 @@ class HistorySession {
     this.createdAt,
     this.questionCount,
     this.questionSetId,
-    this.isPublished = false,
+    this.isPublished  = false,
+    this.isBookmarked = false,
   });
 
-  HistorySession copyWith({bool? isPublished}) => HistorySession(
+  HistorySession copyWith({bool? isPublished, bool? isBookmarked}) => HistorySession(
         id:            id,
         jobTitle:      jobTitle,
         role:          role,
@@ -45,7 +48,8 @@ class HistorySession {
         createdAt:     createdAt,
         questionCount: questionCount,
         questionSetId: questionSetId,
-        isPublished:   isPublished ?? this.isPublished,
+        isPublished:   isPublished  ?? this.isPublished,
+        isBookmarked:  isBookmarked ?? this.isBookmarked,
       );
 
   factory HistorySession.fromJson(Map<String, dynamic> j) {
@@ -76,6 +80,7 @@ class HistorySession {
       id:         (j['jobId'] ?? j['id'] ?? j['job_id'])?.toString() ?? '',
       jobTitle:   j['jobTitle']?.toString()
           ?? j['title']?.toString()
+          ?? j['name']?.toString()
           ?? planRole
           ?? input['jobTitle']?.toString()
           ?? input['position']?.toString(),
@@ -94,24 +99,35 @@ class HistorySession {
     );
   }
 
+  /// Build a [HistorySession] from a Studio V2 [StudioProject].
+  factory HistorySession.fromStudioProject(StudioProject p) => HistorySession(
+        id:            p.id,
+        jobTitle:      p.name,
+        status:        p.status.toApiString(),
+        questionSetId: p.questionSetId,
+        isPublished:   p.isPublished,
+      );
+
   String get displayTitle => jobTitle ?? role ?? 'Interview';
 
-  bool get isInProgress =>
-      status == 'PROCESSING' ||
-      status == 'QUEUED' ||
-      status == 'PLAN_GENERATION_IN_PROGRESS' ||
-      status == 'QUESTION_GENERATION_IN_PROGRESS' ||
-      status == 'WAITING_HR_APPROVAL' ||
-      status == 'PLAN_PROPOSED' ||
-      status == 'PLAN_QUEUED' ||
-      status == 'CONFIRMED' ||
-      status == 'QUESTION_QUEUED' ||
-      status == 'QUESTION_PROCESSING';
+  bool get isInProgress {
+    final s = status.toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
+    // V1 statuses
+    if (s == 'PROCESSING' || s == 'QUEUED' ||
+        s == 'PLAN_GENERATION_IN_PROGRESS' || s == 'QUESTION_GENERATION_IN_PROGRESS' ||
+        s == 'WAITING_HR_APPROVAL' || s == 'PLAN_PROPOSED' ||
+        s == 'PLAN_QUEUED' || s == 'CONFIRMED' ||
+        s == 'QUESTION_QUEUED' || s == 'QUESTION_PROCESSING') return true;
+    // Studio V2 statuses that are still in-progress
+    if (s == 'DRAFT' || s == 'REFINING' || s == 'AWAITINGAPPROVAL' ||
+        s == 'APPROVED') return true;
+    return false;
+  }
 
-  /// Sessions that should reopen the generate flow at the current step.
+  /// Sessions that should reopen the Studio wizard at the current step.
   bool get canResumeGeneration {
     final s = status.toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
-    const completed = {'COMPLETED', 'DONE', 'SUCCESS'};
+    const completed = {'COMPLETED', 'DONE', 'SUCCESS', 'GENERATED', 'ARCHIVED'};
     return !completed.contains(s);
   }
 }
@@ -150,7 +166,9 @@ class HistoryState {
 
   List<HistorySession> get filtered {
     var list = sessions;
-    if (statusFilter != 'ALL') {
+    if (statusFilter == 'BOOKMARKED') {
+      list = list.where((s) => s.isBookmarked).toList();
+    } else if (statusFilter != 'ALL') {
       list = list.where((s) => s.status == statusFilter).toList();
     }
     if (searchQuery.isNotEmpty) {
@@ -186,57 +204,43 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
   // ── Shared fetch logic used by both load() and poll ───────────────────────
 
   static Future<List<HistorySession>> _fetchMergedSessions() async {
-    final dio = buildGenerationDio();
+    final repo = StudioRepository();
+    final projects = await repo.listProjects();
+    return projects
+        .map((p) => HistorySession.fromStudioProject(p))
+        .toList();
+  }
 
-    // Jobs endpoint (all statuses including in-progress)
-    final jobResp = await dio.get('/api/hr/question-generation-jobs');
-    final jobList = _extractList(jobResp.data);
-
-    // Question-sets endpoint (title + publish status) — optional
-    final qSetByJobId = <String, Map<String, dynamic>>{};
+  static Future<List<HistorySession>> _applyBookmarks(
+      List<HistorySession> sessions) async {
     try {
-      final qsResp = await dio.get('/api/hr/question-sets');
-      for (final raw in _extractList(qsResp.data)) {
-        final qs = raw is Map ? Map<String, dynamic>.from(raw) : null;
-        if (qs == null) continue;
-        final jobId = (qs['jobId'] ?? qs['job_id'])?.toString();
-        if (jobId != null && jobId.isNotEmpty) qSetByJobId[jobId] = qs;
-      }
-    } catch (_) {}
-
-    final sessions = jobList.map((raw) {
-      if (raw is! Map) return null;
-      final job = Map<String, dynamic>.from(raw);
-      final jobId = (job['jobId'] ?? job['id'] ?? job['job_id'])?.toString() ?? '';
-      final qSet = qSetByJobId[jobId];
-      if (qSet != null) {
-        // Overlay question-set fields — ??= keeps existing value if already set
-        job['title']         ??= qSet['title'];
-        job['questionSetId'] ??= qSet['questionSetId'];
-        job['publishedAt']   ??= qSet['publishedAt'];
-        final alreadyPublished = (job['isPublished'] as bool?) ?? false;
-        if (!alreadyPublished) {
-          job['isPublished'] = (qSet['status']?.toString().toUpperCase() == 'PUBLISHED') ||
-              qSet['publishedAt'] != null;
-        }
-      }
-      return HistorySession.fromJson(job);
-    }).whereType<HistorySession>().toList()
-      ..sort((a, b) {
-        final ta = a.createdAt ?? DateTime(0);
-        final tb = b.createdAt ?? DateTime(0);
-        return tb.compareTo(ta);
-      });
-
-    return sessions;
+      final dio = buildGenerationDio();
+      final res = await dio.get('/api/hr/bookmarks');
+      final list = _extractList(res.data);
+      final bookmarkedIds = list
+          .whereType<Map>()
+          .map((m) =>
+              (m['id'] ?? m['questionSetId'] ?? m['setId'])?.toString())
+          .whereType<String>()
+          .toSet();
+      return sessions
+          .map((s) => s.copyWith(
+                isBookmarked: s.questionSetId != null &&
+                    bookmarkedIds.contains(s.questionSetId),
+              ))
+          .toList();
+    } catch (_) {
+      return sessions;
+    }
   }
 
   Future<void> load() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final sessions = await _fetchMergedSessions();
-      state = state.copyWith(sessions: sessions, isLoading: false);
-      _maybeStartPoll(sessions);
+      final withBk   = await _applyBookmarks(sessions);
+      state = state.copyWith(sessions: withBk, isLoading: false);
+      _maybeStartPoll(withBk);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _err(e));
     }
@@ -253,7 +257,13 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
       try {
         // Use the same merged fetch so poll doesn't strip title/publish data
         final updated = await _fetchMergedSessions();
-        if (mounted) state = state.copyWith(sessions: updated);
+        // Preserve bookmark state from current view
+        final prev   = state.sessions;
+        final merged = updated.map((s) {
+          final ex = prev.firstWhere((e) => e.id == s.id, orElse: () => s);
+          return s.copyWith(isBookmarked: ex.isBookmarked);
+        }).toList();
+        if (mounted) state = state.copyWith(sessions: merged);
       } catch (_) {}
     });
   }
@@ -353,6 +363,52 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
     }
   }
 
+  Future<void> toggleBookmark(String sessionId) async {
+    final session = state.sessions.firstWhere(
+      (s) => s.id == sessionId,
+      orElse: () => const HistorySession(id: '', status: ''),
+    );
+    final qSetId = session.questionSetId;
+    if (qSetId == null || qSetId.isEmpty) return;
+    final newVal = !session.isBookmarked;
+    state = state.copyWith(
+      sessions: state.sessions
+          .map((s) => s.id == sessionId ? s.copyWith(isBookmarked: newVal) : s)
+          .toList(),
+    );
+    try {
+      final dio = buildGenerationDio();
+      await dio.post('/api/hr/question-sets/$qSetId/bookmark');
+    } catch (e) {
+      state = state.copyWith(
+        sessions: state.sessions
+            .map((s) =>
+                s.id == sessionId ? s.copyWith(isBookmarked: !newVal) : s)
+            .toList(),
+        error: _err(e),
+      );
+    }
+  }
+
+  Future<void> renameTitle(String sessionId, String newTitle) async {
+    final trimmed = newTitle.trim();
+    if (trimmed.isEmpty || trimmed.length > 500) return;
+    final session = state.sessions.firstWhere(
+      (s) => s.id == sessionId,
+      orElse: () => const HistorySession(id: '', status: ''),
+    );
+    final qSetId = session.questionSetId;
+    if (qSetId == null || qSetId.isEmpty) return;
+    try {
+      final dio = buildGenerationDio();
+      await dio.put('/api/hr/question-sets/$qSetId/title',
+          data: {'title': trimmed});
+      await load();
+    } catch (e) {
+      state = state.copyWith(error: _err(e));
+    }
+  }
+
   void setSearch(String q)    => state = state.copyWith(searchQuery: q);
   void setFilter(String f)    => state = state.copyWith(statusFilter: f);
   void clearError()           => state = state.copyWith(error: null);
@@ -421,7 +477,9 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
     final hState   = ref.watch(historyProvider);
     final notifier = ref.read(historyProvider.notifier);
 
-    return RefreshIndicator(
+    return Stack(
+      children: [
+        RefreshIndicator(
       onRefresh: notifier.load,
       color:     const Color(0xFF6C47FF),
       child: CustomScrollView(
@@ -527,30 +585,57 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
                           isDark:      isDark,
                           onView:      () => _openSession(context, s),
                           onDelete:    () => _confirmDelete(context, s, notifier),
+                          onRename:    () => _showRenameDialog(context, s, notifier),
                           onPublish:   () => notifier.publishSession(s.id),
                           onUnpublish: () => notifier.unpublishSession(s.id),
+                          onBookmark:  () => notifier.toggleBookmark(s.id),
                         ),
                       )),
 
-                const SizedBox(height: 24),
+                // Extra bottom padding so last card doesn't hide behind FAB
+                const SizedBox(height: 80),
               ]),
             ),
           ),
         ],
       ),
+    ),
+        // ── FAB: Tạo bộ câu hỏi mới ──────────────────────────────────────
+        Positioned(
+          bottom: 16,
+          left:   16,
+          right:  16,
+          child: SafeArea(
+            child: FilledButton.icon(
+              onPressed: () => context.go('/hr/generate-question'),
+              icon:  const Icon(Icons.add_rounded, size: 20),
+              label: const Text(
+                'Tạo bộ câu hỏi mới',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF6C47FF),
+                foregroundColor: Colors.white,
+                minimumSize:    const Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 4,
+                shadowColor: const Color(0xFF6C47FF).withOpacity(0.4),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Future<void> _openSession(BuildContext context, HistorySession s) async {
-    if (!s.canResumeGeneration) {
+    if (s.canResumeGeneration) {
+      // Open Studio wizard to resume editing this project
+      context.go('/hr/generate-question?projectId=${Uri.encodeComponent(s.id)}');
+    } else {
       context.push('/hr/history/${s.id}');
-      return;
     }
-
-    final jobId = s.id;
-    await ref.read(generationProvider.notifier).resumeJob(jobId);
-    if (!context.mounted) return;
-    context.go('/hr/generate?jobId=${Uri.encodeComponent(jobId)}');
   }
 
   Future<void> _confirmDelete(
@@ -593,12 +678,65 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
   }
 
   List<_StatusFilter> _statusFilters(AppLocalizations l) => [
-    _StatusFilter(label: l.allSessions,  value: 'ALL'),
-    _StatusFilter(label: l.completed,    value: 'COMPLETED'),
-    const _StatusFilter(label: 'Plan Ready',   value: 'PLAN_PROPOSED'),
-    _StatusFilter(label: l.inProgress,   value: 'PROCESSING'),
-    _StatusFilter(label: l.failed,       value: 'FAILED'),
+    _StatusFilter(label: l.allSessions,             value: 'ALL'),
+    _StatusFilter(label: l.completed,               value: 'COMPLETED'),
+    const _StatusFilter(label: 'Plan Ready',        value: 'PLAN_PROPOSED'),
+    _StatusFilter(label: l.inProgress,              value: 'PROCESSING'),
+    _StatusFilter(label: l.failed,                  value: 'FAILED'),
+    const _StatusFilter(label: 'Đã lưu',            value: 'BOOKMARKED'),
   ];
+
+  Future<void> _showRenameDialog(
+    BuildContext context,
+    HistorySession s,
+    HistoryNotifier notifier,
+  ) async {
+    if (s.questionSetId == null) return;
+    final ctrl = TextEditingController(text: s.displayTitle);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1A1F35) : Colors.white,
+          title: Text('Đổi tên bộ câu hỏi',
+              style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF111827))),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            maxLength: 500,
+            style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF111827)),
+            decoration: const InputDecoration(hintText: 'Tên mới...'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('Hủy',
+                  style: TextStyle(
+                      color: isDark
+                          ? const Color(0xFF9CA3AF)
+                          : const Color(0xFF6B7280))),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C47FF)),
+              child: const Text('Lưu'),
+            ),
+          ],
+        );
+      },
+    );
+    if (ok != true) {
+      ctrl.dispose();
+      return;
+    }
+    final title = ctrl.text;
+    ctrl.dispose();
+    await notifier.renameTitle(s.id, title);
+  }
 }
 
 class _StatusFilter {
@@ -710,8 +848,10 @@ class _SessionCard extends StatefulWidget {
   final bool isDark;
   final VoidCallback onView;
   final VoidCallback onDelete;
+  final Future<void> Function() onRename;
   final Future<void> Function() onPublish;
   final Future<void> Function() onUnpublish;
+  final Future<void> Function() onBookmark;
 
   const _SessionCard({
     super.key,
@@ -719,8 +859,10 @@ class _SessionCard extends StatefulWidget {
     required this.isDark,
     required this.onView,
     required this.onDelete,
+    required this.onRename,
     required this.onPublish,
     required this.onUnpublish,
+    required this.onBookmark,
   });
 
   @override
@@ -788,15 +930,18 @@ class _SessionCardState extends State<_SessionCard> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    s.displayTitle,
-                    style: TextStyle(
-                        color:      isDark ? Colors.white : const Color(0xFF111827),
-                        fontSize:   14,
-                        fontWeight: FontWeight.w600,
-                        height:     1.3),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: GestureDetector(
+                    onLongPress: widget.onRename,
+                    child: Text(
+                      s.displayTitle,
+                      style: TextStyle(
+                          color:      isDark ? Colors.white : const Color(0xFF111827),
+                          fontSize:   14,
+                          fontWeight: FontWeight.w600,
+                          height:     1.3),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -888,6 +1033,24 @@ class _SessionCardState extends State<_SessionCard> {
                 ],
 
                 const Spacer(),
+
+                // Bookmark
+                SizedBox(
+                  width: 30, height: 30,
+                  child: IconButton(
+                    onPressed: widget.onBookmark,
+                    padding: EdgeInsets.zero,
+                    icon: Icon(
+                      s.isBookmarked
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                      size: 17,
+                      color: s.isBookmarked
+                          ? const Color(0xFF6C47FF)
+                          : const Color(0xFFD1D5DB),
+                    ),
+                  ),
+                ),
 
                 // View button
                 TextButton(
@@ -1019,9 +1182,9 @@ class _EmptyState extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => context.go('/hr/generate'),
+                onPressed: () => context.go('/hr/generate-question'),
                 icon:  const Icon(Icons.add_rounded, size: 16),
-                label: const Text('Generate Questions'),
+                label: const Text('Tạo bộ câu hỏi mới'),
                 style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF6C47FF)),
               ),

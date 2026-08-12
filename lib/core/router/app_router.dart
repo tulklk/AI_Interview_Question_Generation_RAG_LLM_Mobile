@@ -15,7 +15,7 @@ import '../../features/shell/hr_app_shell.dart';
 import '../../features/dashboard/hr_dashboard_screen.dart' as dash;
 import '../../features/hr/screens/jobs_screen.dart';
 import '../../features/hr/screens/create_job_screen.dart';
-import '../../features/hr_generate/presentation/screens/generate_screen.dart';
+import '../../features/hr_generate/presentation/screens/studio_wizard_screen.dart';
 import '../../features/hr/screens/candidates_screen.dart';
 import '../../features/hr/screens/candidate_detail_screen.dart';
 import '../../features/hr/screens/interviews_screen.dart';
@@ -37,12 +37,17 @@ import '../../features/jobseeker/screens/dashboard/jobseeker_dashboard_screen.da
 import '../../features/jobseeker/screens/marketplace/marketplace_screen.dart';
 import '../../features/jobseeker/screens/set_detail/set_detail_screen.dart';
 import '../../features/jobseeker/screens/practice/practice_session_screen.dart';
-import '../../features/jobseeker/screens/feedback/feedback_screen.dart';
+import '../../features/jobseeker/screens/feedback/feedback_result_screen.dart';
 import '../../features/jobseeker/screens/history/jobseeker_history_screen.dart';
 import '../../features/jobseeker/screens/profile/jobseeker_profile_screen.dart';
 import '../../features/jobseeker/screens/settings/jobseeker_settings_screen.dart';
+import '../../features/jobseeker/screens/saved/saved_screen.dart';
+import '../../features/jobseeker/screens/invitations/invitations_screen.dart';
 import '../../features/hr_generate/presentation/screens/recommendation_list_screen.dart';
 import '../../features/hr_generate/presentation/screens/recommendation_detail_screen.dart';
+import '../../features/manual_builder/screens/manual_builder_screen.dart';
+import '../../features/subscription/subscription_screen.dart';
+import '../../features/jobseeker/screens/subscription/candidate_subscription_screen.dart';
 
 final _rootKey           = GlobalKey<NavigatorState>();
 // HR tab branch keys — one per bottom-nav slot
@@ -124,35 +129,74 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
-      // ── AI Generator / Generate — full-screen outside shell ───────────────
+      // ── AI Generator / Studio — full-screen outside shell ────────────────
+      // Canonical route per spec §6.0
+      GoRoute(
+        path:               '/hr/generate-question',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) => StudioWizardScreen(
+          key: ValueKey(state.uri.toString()),
+          resumeJobId: state.uri.queryParameters['projectId']
+              ?? state.uri.queryParameters['jobId'],
+        ),
+      ),
+      // Aliases → canonical
       GoRoute(
         path:               '/hr/generate',
         parentNavigatorKey: _rootKey,
-        builder: (_, state) => GenerateScreen(
-          key: ValueKey(state.uri.toString()),
-          resumeJobId: state.uri.queryParameters['jobId'],
-        ),
+        redirect: (_, state) {
+          final q = state.uri.queryParameters;
+          final projectId = q['projectId'] ?? q['jobId'];
+          final suffix    = projectId != null ? '?projectId=${Uri.encodeComponent(projectId)}' : '';
+          return '/hr/generate-question$suffix';
+        },
       ),
-      // Legacy alias
+      GoRoute(
+        path:               '/hr/generate-question/manual',
+        parentNavigatorKey: _rootKey,
+        redirect: (_, __) => '/hr/manual-builder',
+      ),
+      // Legacy aliases
       GoRoute(
         path:               '/hr/ai-generator',
         parentNavigatorKey: _rootKey,
-        builder: (_, state) => GenerateScreen(
-          key: ValueKey(state.uri.toString()),
-          resumeJobId: state.uri.queryParameters['jobId'],
-        ),
+        redirect: (_, state) {
+          final projectId = state.uri.queryParameters['projectId']
+              ?? state.uri.queryParameters['jobId'];
+          final suffix    = projectId != null ? '?projectId=${Uri.encodeComponent(projectId)}' : '';
+          return '/hr/generate-question$suffix';
+        },
       ),
       GoRoute(
         path:               '/hr/ai-generator/plan/:jobId',
         parentNavigatorKey: _rootKey,
         redirect: (_, state) =>
-            '/hr/generate?jobId=${Uri.encodeComponent(state.pathParameters['jobId']!)}',
+            '/hr/generate-question?projectId=${Uri.encodeComponent(state.pathParameters['jobId']!)}',
       ),
       GoRoute(
         path:               '/hr/ai-generator/questions/:jobId',
         parentNavigatorKey: _rootKey,
         redirect: (_, state) =>
-            '/hr/generate?jobId=${Uri.encodeComponent(state.pathParameters['jobId']!)}',
+            '/hr/generate-question?projectId=${Uri.encodeComponent(state.pathParameters['jobId']!)}',
+      ),
+
+      // ── Manual Builder — full-screen outside shell ───────────────────────
+      GoRoute(
+        path:               '/hr/manual-builder',
+        parentNavigatorKey: _rootKey,
+        builder: (_, __) => const ManualBuilderScreen(),
+      ),
+
+      // ── Subscription / upgrade — full-screen outside shell ───────────────
+      GoRoute(
+        path:               '/hr/subscription',
+        parentNavigatorKey: _rootKey,
+        builder: (_, __) => const SubscriptionScreen(audience: 'HR'),
+      ),
+      GoRoute(
+        path:               '/jobseeker/subscription',
+        parentNavigatorKey: _rootKey,
+        builder: (_, __) => const CandidateSubscriptionScreen(),
       ),
 
       // ── History detail — full-screen outside shell ────────────────────────
@@ -313,8 +357,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path:               'result',
             parentNavigatorKey: _rootKey,
+            // `:id` is now the *sessionId* (not setId) when navigating here.
+            // PracticeSessionScreen sets context.go('/jobseeker/practice/$sessionId/result').
             builder: (_, state) =>
-                FeedbackScreen(setId: state.pathParameters['id']!),
+                FeedbackResultScreen(sessionId: state.pathParameters['id']!),
           ),
         ],
       ),
@@ -322,7 +368,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Jobseeker Shell ───────────────────────────────────────────────────
       ShellRoute(
         navigatorKey: _jobseekerShellKey,
-        builder: (_, __, child) => JobseekerShell(child: child),
+        builder: (_, state, child) => JobseekerShell(
+          child:    child,
+          location: state.matchedLocation,
+        ),
         routes: [
           GoRoute(
             path:    '/jobseeker/dashboard',
@@ -336,6 +385,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path:    '/jobseeker/sets/:id',
             builder: (_, state) =>
                 SetDetailScreen(setId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path:    '/jobseeker/saved',
+            builder: (_, __) => const SavedScreen(),
+          ),
+          GoRoute(
+            path:    '/jobseeker/invitations',
+            builder: (_, __) => const InvitationsScreen(),
           ),
           GoRoute(
             path:    '/jobseeker/history',

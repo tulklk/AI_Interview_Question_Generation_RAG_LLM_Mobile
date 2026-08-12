@@ -207,25 +207,29 @@ class _SplashScreenState extends State<SplashScreen>
 
                 const SizedBox(height: 40),
 
-                // App name
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [
-                      Color(0xFFCFB3FF),
-                      Color(0xFF7C5CFF),
-                      Color(0xFF60A5FA),
+                // App name — HireGen white + AI purple
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'HireGen ',
+                        style: AppTextStyles.display.copyWith(
+                          color: Colors.white,
+                          fontSize: 40,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      TextSpan(
+                        text: 'AI',
+                        style: AppTextStyles.display.copyWith(
+                          color: AppColors.brandPurple,
+                          fontSize: 40,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ).createShader(bounds),
-                  child: Text(
-                    AppConstants.appName,
-                    style: AppTextStyles.display.copyWith(
-                      color: Colors.white,
-                      fontSize: 40,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
                   ),
                 )
                     .animate()

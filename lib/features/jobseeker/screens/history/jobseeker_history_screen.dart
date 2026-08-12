@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/i18n/app_localizations.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/glass_card.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
@@ -33,12 +34,12 @@ class JobseekerHistoryScreen extends ConsumerWidget {
     final isLoading = historyAsync.isLoading;
     final loadError = historyAsync.error;
 
-    final bg = isDark ? const Color(0xFF070A13) : const Color(0xFFF8FAFC);
-    final cardBg = isDark ? const Color(0xFF1A1F35) : Colors.white;
-    final borderC = isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+    final bg = AppColors.surfaceBg(isDark);
+    final cardBg = AppColors.cardBg(isDark);
+    final borderC = AppColors.borderColor(isDark);
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         child: Column(
@@ -48,7 +49,7 @@ class JobseekerHistoryScreen extends ConsumerWidget {
             Text(
               l10n.practiceHistory,
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF111827),
+                color: AppColors.textPrimary(isDark),
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
               ),
@@ -108,7 +109,7 @@ class JobseekerHistoryScreen extends ConsumerWidget {
                       Text(
                         'Không thể tải lịch sử',
                         style: TextStyle(
-                          color: isDark ? Colors.white : const Color(0xFF111827),
+                          color: AppColors.textPrimary(isDark),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -240,13 +241,10 @@ class _MiniStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassCard(
+      isDark: isDark,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderC),
-      ),
+      borderRadius: 12,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -263,7 +261,7 @@ class _MiniStat extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF111827),
+              color: AppColors.textPrimary(isDark),
               fontSize: 20,
               fontWeight: FontWeight.w800,
             ),
@@ -309,7 +307,7 @@ class _SearchBar extends ConsumerWidget {
         onChanged: (v) =>
             ref.read(historyFilterProvider.notifier).setSearch(v),
         style: TextStyle(
-          color: isDark ? Colors.white : const Color(0xFF111827),
+          color: AppColors.textPrimary(isDark),
           fontSize: 14,
         ),
         decoration: InputDecoration(
@@ -422,22 +420,10 @@ class _SessionCard extends StatelessWidget {
     final sc = scoreColor(session.score);
     final dateStr = session.date;
 
-    return Container(
+    return GlassCard(
+      isDark: isDark,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderC),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-      ),
+      borderRadius: 14,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -488,7 +474,7 @@ class _SessionCard extends StatelessWidget {
                         session.setTitle,
                         style: TextStyle(
                           color:
-                              isDark ? Colors.white : const Color(0xFF111827),
+                              AppColors.textPrimary(isDark),
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
@@ -550,10 +536,10 @@ class _SessionCard extends StatelessWidget {
                     ),
                     const Spacer(),
 
-                    // View session
+                    // View session — use session.id (sessionId), not setId
                     GestureDetector(
                       onTap: () => context.go(
-                          '/jobseeker/practice/${session.setId}/result'),
+                          '/jobseeker/practice/${session.id}/result'),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 5),
@@ -579,14 +565,14 @@ class _SessionCard extends StatelessWidget {
                     // Retry
                     GestureDetector(
                       onTap: () =>
-                          context.go('/jobseeker/practice/${session.setId}'),
+                          context.push('/jobseeker/practice/${session.setId}'),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? const Color(0xFF1A1F35)
-                              : const Color(0xFFF3F4F6),
+                              ? AppColors.darkCard
+                              : AppColors.gray100,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: borderC),
                         ),
@@ -665,7 +651,7 @@ class _EmptyState extends StatelessWidget {
             Icon(
               Icons.history_rounded,
               size: 56,
-              color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+              color: AppColors.borderColor(isDark),
             ),
             const SizedBox(height: 16),
             Text(

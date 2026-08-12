@@ -283,7 +283,7 @@ class RecommendationPage {
         for (final key in ['content', 'items', 'data', 'result']) {
           if (inner[key] is List) { list = inner[key] as List; break; }
         }
-        if (list.isEmpty && inner is Map) {
+        if (list.isEmpty) {
           for (final key in ['content', 'items']) {
             if (raw[key] is List) { list = raw[key] as List; break; }
           }
