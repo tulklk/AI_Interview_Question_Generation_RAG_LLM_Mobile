@@ -10,6 +10,7 @@ class RecommendationRepository {
     String? questionSetId,
     String? status,
     int? minScore,
+    String? sortBy,
     int page = 0,
     int size = 10,
   }) async {
@@ -25,6 +26,9 @@ class RecommendationRepository {
     }
     if (minScore != null) {
       params['minScore'] = minScore;
+    }
+    if (sortBy != null && sortBy.isNotEmpty) {
+      params['sortBy'] = sortBy;
     }
 
     final res = await _dio.get(_base, queryParameters: params);

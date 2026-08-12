@@ -5,40 +5,68 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../../core/i18n/app_localizations.dart';
+import '../../../../core/providers/ui_providers.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
-class SetDetailScreen extends ConsumerWidget {
+class SetDetailScreen extends ConsumerStatefulWidget {
   final String setId;
   const SetDetailScreen({super.key, required this.setId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SetDetailScreen> createState() => _SetDetailScreenState();
+}
+
+class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Hide the bottom nav bar while viewing a set detail page
+      ref.read(navBarVisibleProvider.notifier).state = false;
+      // Refetch IN_PROGRESS so CTA switches to "Tiếp tục" after mid-exit
+      ref.invalidate(inProgressSessionProvider(widget.setId));
+    });
+  }
+
+  @override
+  void dispose() {
+    // Grab the notifier reference BEFORE dispose tears down ref, then defer the
+    // state update to the next frame.  Calling notifier.state = true directly
+    // inside dispose() causes a synchronous Riverpod rebuild while the element
+    // tree is still being unmounted, which triggers the
+    // '_ElementLifecycle.inactive is not true' Flutter assertion.
+    final notifier = ref.read(navBarVisibleProvider.notifier);
+    WidgetsBinding.instance.addPostFrameCallback((_) => notifier.state = true);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final l10n = context.l10n;
-    final asyncSet = ref.watch(setDetailProvider(setId));
-
-    final bg = isDark ? const Color(0xFF070A13) : const Color(0xFFF8FAFC);
+    final asyncSet = ref.watch(setDetailProvider(widget.setId));
 
     return asyncSet.when(
       loading: () => Scaffold(
-        backgroundColor: bg,
+        backgroundColor: Colors.transparent,
         body: _LoadingBody(isDark: isDark, l10n: l10n),
       ),
       error: (e, _) => Scaffold(
-        backgroundColor: bg,
+        backgroundColor: Colors.transparent,
         body: _ErrorBody(
           isDark: isDark,
           l10n: l10n,
           message: e.toString(),
-          onRetry: () => ref.invalidate(setDetailProvider(setId)),
+          onRetry: () => ref.invalidate(setDetailProvider(widget.setId)),
         ),
       ),
       data: (set) {
         if (set == null) {
           return Scaffold(
-            backgroundColor: bg,
+            backgroundColor: Colors.transparent,
             body: _NotFoundBody(isDark: isDark, l10n: l10n),
           );
         }
@@ -154,9 +182,9 @@ class _ShimmerState extends State<_Shimmer>
       animation: _anim,
       builder: (_, __) {
         final base =
-            widget.isDark ? const Color(0xFF1A1F35) : const Color(0xFFE5E7EB);
+            widget.isDark ? AppColors.darkCard : AppColors.gray200;
         final hi =
-            widget.isDark ? const Color(0xFF252B47) : const Color(0xFFF3F4F6);
+            widget.isDark ? const Color(0xFF252B47) : AppColors.gray100;
         return Container(
           width: widget.width == double.infinity ? null : widget.width,
           height: widget.height,
@@ -196,7 +224,7 @@ class _NotFoundBody extends StatelessWidget {
             Text(
               'Không tìm thấy bộ câu hỏi',
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF111827),
+                color: AppColors.textPrimary(isDark),
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -255,7 +283,7 @@ class _ErrorBody extends StatelessWidget {
             Text(
               'Không thể tải chi tiết',
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF111827),
+                color: AppColors.textPrimary(isDark),
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -323,8 +351,7 @@ class _DetailBody extends StatelessWidget {
     final isWide = MediaQuery.of(context).size.width > 840;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF070A13) : const Color(0xFFF8FAFC),
+      backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         child: Column(
@@ -456,7 +483,7 @@ class _LeftColumnState extends ConsumerState<_LeftColumn> {
                   Text(
                     set.title,
                     style: TextStyle(
-                      color: isDark ? Colors.white : const Color(0xFF111827),
+                      color: AppColors.textPrimary(isDark),
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
                       height: 1.2,
@@ -511,8 +538,8 @@ class _LeftColumnState extends ConsumerState<_LeftColumn> {
 
         const SizedBox(height: 16),
 
-        // Description
-        if (set.description.isNotEmpty)
+        // Description (hide internal Studio metadata like STUDIO_SAVE; project=...)
+        if (_isValidDescription(set.description))
           Text(
             set.description,
             style: TextStyle(
@@ -561,7 +588,7 @@ class _LeftColumnState extends ConsumerState<_LeftColumn> {
           Text(
             l10n.skillsCovered,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF111827),
+              color: AppColors.textPrimary(isDark),
               fontSize: 14,
               fontWeight: FontWeight.w700,
             ),
@@ -578,10 +605,10 @@ class _LeftColumnState extends ConsumerState<_LeftColumn> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2D3562) : const Color(0xFFF3F4F6),
+                      color: isDark ? AppColors.darkCardBorder : AppColors.gray100,
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: isDark ? const Color(0xFF3D4A7A) : const Color(0xFFE5E7EB),
+                        color: isDark ? const Color(0xFF3D4A7A) : AppColors.gray200,
                       ),
                     ),
                     child: Text(
@@ -604,7 +631,7 @@ class _LeftColumnState extends ConsumerState<_LeftColumn> {
         Text(
           l10n.questionPreview,
           style: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF111827),
+            color: AppColors.textPrimary(isDark),
             fontSize: 15,
             fontWeight: FontWeight.w700,
           ),
@@ -629,11 +656,11 @@ class _EmptyQuestions extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        color: AppColors.cardBg(isDark),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color:
-              isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+              AppColors.borderColor(isDark),
         ),
       ),
       child: Center(
@@ -690,10 +717,10 @@ class _QuestionPreviewAccordion extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        color: AppColors.cardBg(isDark),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+          color: AppColors.borderColor(isDark),
         ),
       ),
       child: Column(
@@ -718,7 +745,7 @@ class _QuestionPreviewAccordion extends StatelessWidget {
                       child: Text(
                         categoryLabel(e.cat),
                         style: TextStyle(
-                          color: isDark ? const Color(0xFFE5E7EB) : const Color(0xFF374151),
+                          color: isDark ? AppColors.gray200 : const Color(0xFF374151),
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -747,7 +774,7 @@ class _QuestionPreviewAccordion extends StatelessWidget {
                   height: 1,
                   indent: 16,
                   endIndent: 16,
-                  color: isDark ? const Color(0xFF2D3562) : const Color(0xFFF3F4F6),
+                  color: isDark ? AppColors.darkCardBorder : AppColors.gray100,
                 ),
             ],
           );
@@ -790,12 +817,12 @@ class _CompanyDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(companyDetailProvider(companyId));
-    final bg = isDark ? const Color(0xFF1A1F35) : Colors.white;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF111827);
+    final bg = AppColors.cardBg(isDark);
+    final textPrimary = AppColors.textPrimary(isDark);
     final textSub =
         isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
     final dividerColor =
-        isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+        AppColors.borderColor(isDark);
 
     final Widget content = async.when(
       loading: () => const SizedBox(
@@ -1021,11 +1048,11 @@ class _OverviewCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        color: AppColors.cardBg(isDark),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color:
-              isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB),
+              AppColors.borderColor(isDark),
         ),
         boxShadow: isDark
             ? []
@@ -1043,7 +1070,7 @@ class _OverviewCard extends StatelessWidget {
           Text(
             l10n.sessionOverview,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF111827),
+              color: AppColors.textPrimary(isDark),
               fontSize: 15,
               fontWeight: FontWeight.w700,
             ),
@@ -1093,7 +1120,7 @@ class _OverviewCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2D3562) : const Color(0xFFF3F4F6),
+                      color: isDark ? AppColors.darkCardBorder : AppColors.gray100,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -1124,7 +1151,7 @@ class _OverviewCard extends StatelessWidget {
               ),
               child: ElevatedButton(
                 onPressed: () =>
-                    context.go('/jobseeker/practice/${set.id}'),
+                    context.push('/jobseeker/practice/${set.id}'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
@@ -1132,7 +1159,7 @@ class _OverviewCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10)),
                 ),
                 child: Text(
-                  hasInProgress ? 'Tiếp tục phiên' : l10n.startPractice,
+                  hasInProgress ? 'Tiếp tục Luyện tập' : l10n.startPractice,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
@@ -1181,7 +1208,7 @@ class _OverviewRow extends StatelessWidget {
               Text(
                 value ?? '',
                 style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF111827),
+                  color: AppColors.textPrimary(isDark),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1316,4 +1343,13 @@ class _MetaChip extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Hides internal Studio metadata (e.g. "STUDIO_SAVE; project=...").
+bool _isValidDescription(String desc) {
+  if (desc.trim().isEmpty) return false;
+  final upper = desc.trimLeft().toUpperCase();
+  if (upper.startsWith('STUDIO_')) return false;
+  if (desc.contains('project=')) return false;
+  return true;
 }

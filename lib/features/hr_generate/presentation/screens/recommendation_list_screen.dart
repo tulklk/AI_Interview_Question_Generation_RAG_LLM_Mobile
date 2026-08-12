@@ -57,8 +57,7 @@ class _RecommendationListScreenState
     });
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF0A0A14) : const Color(0xFFF4F5FB),
+      backgroundColor: Colors.transparent,
       body: Column(
         children: [
           _FilterBar(isDark: isDark),
@@ -208,6 +207,13 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                 ),
               ),
               const SizedBox(width: 8),
+              // Sort button
+              _SortButton(
+                sortBy: filter.sortBy,
+                isDark: isDark,
+                onChanged: (v) => notifier.setSortBy(v),
+              ),
+              const SizedBox(width: 6),
               // Score filter icon button
               GestureDetector(
                 onTap: () =>
@@ -366,6 +372,129 @@ class _Chip extends StatelessWidget {
           ),
         ),
       );
+}
+
+// ── Sort button ────────────────────────────────────────────────────────────────
+
+class _SortButton extends StatelessWidget {
+  final String? sortBy;
+  final bool isDark;
+  final void Function(String?) onChanged;
+
+  const _SortButton({
+    required this.sortBy,
+    required this.isDark,
+    required this.onChanged,
+  });
+
+  static const _options = [
+    (value: 'score_desc',    label: 'Điểm cao nhất'),
+    (value: 'score_asc',     label: 'Điểm thấp nhất'),
+    (value: 'created_desc',  label: 'Mới nhất'),
+  ];
+
+  String get _label {
+    if (sortBy == null) return 'Sắp xếp';
+    return _options.firstWhere((o) => o.value == sortBy,
+        orElse: () => (value: '', label: 'Sắp xếp')).label;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = sortBy != null;
+    return PopupMenuButton<String?>(
+      color:         isDark ? const Color(0xFF1A2035) : Colors.white,
+      shape:         RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      offset:        const Offset(0, 36),
+      onSelected:    (v) => onChanged(v == sortBy ? null : v),
+      itemBuilder:   (_) => [
+        ..._options.map((o) => PopupMenuItem<String?>(
+          value: o.value,
+          child: Row(children: [
+            Icon(
+              o.value == sortBy
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 16,
+              color: o.value == sortBy
+                  ? const Color(0xFF6C47FF)
+                  : (isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF)),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              o.label,
+              style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF111827),
+                fontSize: 13,
+                fontWeight: o.value == sortBy
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+              ),
+            ),
+          ]),
+        )),
+        if (active) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem<String?>(
+            value: null,
+            child: Row(children: [
+              Icon(Icons.clear_rounded, size: 16,
+                  color: isDark
+                      ? const Color(0xFF6B7280)
+                      : const Color(0xFF9CA3AF)),
+              const SizedBox(width: 8),
+              Text('Xóa sắp xếp',
+                  style: TextStyle(
+                      color: isDark
+                          ? const Color(0xFF9CA3AF)
+                          : const Color(0xFF6B7280),
+                      fontSize: 13)),
+            ]),
+          ),
+        ],
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+        decoration: BoxDecoration(
+          color: active
+              ? const Color(0xFF6C47FF).withValues(alpha: 0.12)
+              : isDark
+                  ? const Color(0xFF1A2035)
+                  : const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(8),
+          border: active
+              ? Border.all(
+                  color: const Color(0xFF6C47FF).withValues(alpha: 0.4))
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.sort_rounded,
+              size: 15,
+              color: active
+                  ? const Color(0xFF6C47FF)
+                  : isDark
+                      ? const Color(0xFF6B7280)
+                      : const Color(0xFF9CA3AF),
+            ),
+            if (active) ...[
+              const SizedBox(width: 4),
+              Text(
+                _label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color:      Color(0xFF6C47FF),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Recommendation Card ────────────────────────────────────────────────────────

@@ -1,14 +1,17 @@
 import 'dart:math' show cos, pi, sin;
+import 'dart:ui'   show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/providers/theme_provider.dart';
 import '../../core/providers/language_provider.dart';
+import '../../core/providers/ui_providers.dart';
 import '../../core/i18n/app_localizations.dart';
 import '../../data/providers/app_providers.dart';
-import '../../core/widgets/bottom_nav_widgets.dart';
+import '../../core/widgets/grid_background.dart';
+import '../../core/widgets/hiregen_brand_mark.dart';
 import '../../features/hr_generate/presentation/widgets/generation_progress_badge.dart';
+import '../../features/subscription/subscription_provider.dart';
 
 class HRAppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -40,14 +43,17 @@ class HRAppShell extends ConsumerWidget {
     return Scaffold(
       backgroundColor:
           isDark ? const Color(0xFF0A0A14) : const Color(0xFFF4F5FB),
+      extendBody: true,
       appBar: _AppBar(location: currentLocation),
       drawer: _HRDrawer(currentLocation: currentLocation),
       body: Stack(
+        fit: StackFit.expand,
         children: [
+          const Positioned.fill(child: GridBackground()),
           RepaintBoundary(child: navigationShell),
           if (showBadge)
             Positioned(
-              bottom: isWide ? 24 : 76,
+              bottom: isWide ? 24 : 100,
               right:  16,
               child:  const GenerationProgressBadge(),
             ),
@@ -55,13 +61,39 @@ class HRAppShell extends ConsumerWidget {
       ),
       bottomNavigationBar: isWide
           ? null
-          : _HRBottomBar(
-              currentLocation: currentLocation,
-              isDark:          isDark,
-              navigationShell: navigationShell,
+          : _NavSlide(
+              visible: ref.watch(navBarVisibleProvider),
+              child: _HRGlassNavBar(
+                currentLocation: currentLocation,
+                isDark:          isDark,
+                navigationShell: navigationShell,
+              ),
             ),
     );
   }
+}
+
+// ── Nav-bar slide/fade wrapper ────────────────────────────────────────────────
+
+class _NavSlide extends StatelessWidget {
+  final bool   visible;
+  final Widget child;
+  const _NavSlide({required this.visible, required this.child});
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        ignoring: !visible,
+        child: AnimatedSlide(
+          offset:   visible ? Offset.zero : const Offset(0, 1.5),
+          duration: const Duration(milliseconds: 300),
+          curve:    visible ? Curves.easeOutCubic : Curves.easeInCubic,
+          child: AnimatedOpacity(
+            opacity:  visible ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            child: child,
+          ),
+        ),
+      );
 }
 
 // ── AppBar ────────────────────────────────────────────────────────────────────
@@ -93,9 +125,30 @@ class _AppBar extends ConsumerWidget implements PreferredSizeWidget {
 
     return AppBar(
       toolbarHeight: 56,
-      backgroundColor: isDark ? const Color(0xFF0B1020) : Colors.white,
+      backgroundColor: Colors.transparent,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
+      shadowColor: Colors.transparent,
+      flexibleSpace: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            color: isDark
+                ? const Color(0xFF0B1020).withValues(alpha: 0.78)
+                : Colors.white.withValues(alpha: 0.74),
+            foregroundDecoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.07)
+                      : const Color(0xFF6C47FF).withValues(alpha: 0.08),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
       leading: Builder(
         builder: (ctx) => IconButton(
           tooltip: 'Menu',
@@ -180,19 +233,6 @@ class _HRDrawer extends ConsumerStatefulWidget {
 }
 
 class _HRDrawerState extends ConsumerState<_HRDrawer> {
-  String _plan = 'professional';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPlan();
-  }
-
-  Future<void> _loadPlan() async {
-    final p = await SharedPreferences.getInstance();
-    final v = p.getString('hiregen-hr-plan') ?? 'professional';
-    if (mounted) setState(() => _plan = v);
-  }
 
   List<_NavItem> _navItems(AppLocalizations l10n) => [
         _NavItem(
@@ -204,7 +244,12 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
             label: l10n.generateQuestions,
             route: '/hr/generate',
             icon: Icons.auto_awesome_rounded,
-            badge: 'New'),
+            badge: 'AI'),
+        const _NavItem(
+            label: 'Tạo thủ công',
+            route: '/hr/manual-builder',
+            icon: Icons.edit_note_rounded,
+            badge: null),
         _NavItem(
             label: l10n.history,
             route: '/hr/history',
@@ -220,6 +265,11 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
             route: '/hr/knowledge',
             icon: Icons.menu_book_rounded,
             badge: null),
+        const _NavItem(
+            label: 'Gói dịch vụ',
+            route: '/hr/subscription',
+            icon: Icons.workspace_premium_rounded,
+            badge: null),
         _NavItem(
             label: l10n.settings,
             route: '/hr/settings',
@@ -229,15 +279,19 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
 
   bool _isActive(String route) {
     final loc = widget.currentLocation;
-    if (route == '/hr/dashboard')
+    if (route == '/hr/dashboard') {
       return loc == '/hr' || loc.startsWith('/hr/dashboard');
+    }
     return loc.startsWith(route);
   }
 
+  // Full-screen routes that live outside the shell navigator
+  static const _fullScreenRoutes = {'/hr/generate', '/hr/manual-builder'};
+
   void _navigate(BuildContext ctx, String route) {
     Navigator.of(ctx).pop();
-    if (route == '/hr/generate') {
-      context.go('/hr/generate');
+    if (_fullScreenRoutes.contains(route)) {
+      context.go(route);
     } else {
       context.go(route);
     }
@@ -267,53 +321,8 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
                 end: Alignment.bottomRight,
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Logo
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF6C47FF), Color(0xFF8B65FF)],
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.auto_awesome_rounded,
-                          color: Colors.white, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    RichText(
-                      text: const TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'HireGen ',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800),
-                          ),
-                          TextSpan(
-                            text: 'AI',
-                            style: TextStyle(
-                                color: Color(0xFF6C47FF),
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'AI-Powered Interview Question Generator',
-                  style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 11),
-                ),
-              ],
+            child: const HireGenBrandMark(
+              tagline: 'AI-Powered Interview Question Generator',
             ),
           ),
 
@@ -452,24 +461,7 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
                         ],
                       ),
                     ),
-                    if (_planBadge(_plan) != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: _planColor(_plan).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                              color: _planColor(_plan).withValues(alpha: 0.4)),
-                        ),
-                        child: Text(
-                          _planBadge(_plan)!,
-                          style: TextStyle(
-                              color: _planColor(_plan),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700),
-                        ),
-                      ),
+                    const PlanBadgeWidget(),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -534,31 +526,6 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
     );
   }
 
-  String? _planBadge(String p) {
-    switch (p) {
-      case 'professional':
-        return 'Pro';
-      case 'business':
-        return 'Biz';
-      case 'enterprise':
-        return 'Ent.';
-      default:
-        return null;
-    }
-  }
-
-  Color _planColor(String p) {
-    switch (p) {
-      case 'professional':
-        return const Color(0xFF6C47FF);
-      case 'business':
-        return const Color(0xFF3B82F6);
-      case 'enterprise':
-        return const Color(0xFFF59E0B);
-      default:
-        return const Color(0xFF9CA3AF);
-    }
-  }
 }
 
 class _NavItem {
@@ -721,13 +688,14 @@ class _DrawerToggleBtn extends StatelessWidget {
       );
 }
 
-// ── HR Bottom Bar (clean 4-tab) ───────────────────────────────────────────────
+// ── HR Glass Nav Bar ──────────────────────────────────────────────────────────
 
-class _HRBottomBar extends StatelessWidget {
-  final String currentLocation;
-  final bool   isDark;
+class _HRGlassNavBar extends StatelessWidget {
+  final String                  currentLocation;
+  final bool                    isDark;
   final StatefulNavigationShell navigationShell;
-  const _HRBottomBar({
+
+  const _HRGlassNavBar({
     required this.currentLocation,
     required this.isDark,
     required this.navigationShell,
@@ -743,63 +711,138 @@ class _HRBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n  = context.l10n;
-    final barBg = isDark ? const Color(0xFF0B1020) : Colors.white;
+    final l10n     = context.l10n;
+    final safePad  = MediaQuery.of(context).padding.bottom;
+    const pillH    = 60.0;
+    const marginH  = 18.0;
+    const marginBot = 12.0;
+    const topPad   = 4.0;
 
-    return SafeArea(
-      top: false,
-      child: Container(
-        height: 64,
-        decoration: BoxDecoration(
-          color: barBg,
-          border: Border(
-            top: BorderSide(
-              color: isDark
-                  ? const Color(0xFF1E2640)
-                  : const Color(0xFFE5E7EB),
-              width: 1,
+    final pillBg = isDark
+        ? const Color(0xFF1A1D2E).withValues(alpha: 0.74)
+        : const Color(0xFFFFFFFF).withValues(alpha: 0.70);
+    final pillBorder = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.black.withValues(alpha: 0.07);
+
+    return SizedBox(
+      height: topPad + pillH + marginBot + safePad,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          marginH, topPad, marginH, marginBot + safePad,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+            child: Container(
+              decoration: BoxDecoration(
+                color:        pillBg,
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(color: pillBorder, width: 1),
+              ),
+              child: Row(
+                children: [
+                  _HRGlassNavItem(
+                    icon:   Icons.home_rounded,
+                    label:  l10n.dashboard,
+                    active: _active('/hr/dashboard'),
+                    isDark: isDark,
+                    onTap:  () => navigationShell.goBranch(0),
+                  ),
+                  _HRGlassNavItem(
+                    icon:   Icons.history_rounded,
+                    label:  l10n.history,
+                    active: _active('/hr/history'),
+                    isDark: isDark,
+                    onTap:  () => navigationShell.goBranch(1),
+                  ),
+                  _HRGlassNavItem(
+                    icon:   Icons.menu_book_rounded,
+                    label:  l10n.knowledgeBase,
+                    active: _active('/hr/knowledge'),
+                    isDark: isDark,
+                    onTap:  () => navigationShell.goBranch(2),
+                  ),
+                  _HRGlassNavItem(
+                    icon:   Icons.account_circle_rounded,
+                    label:  l10n.profile,
+                    active: _active('/hr/profile'),
+                    isDark: isDark,
+                    onTap:  () => navigationShell.goBranch(3),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: BNItem(
-                icon:   Icons.home_rounded,
-                label:  l10n.dashboard,
-                active: _active('/hr/dashboard'),
-                isDark: isDark,
-                onTap:  () => navigationShell.goBranch(0),
+      ),
+    );
+  }
+}
+
+// ── HR glass nav item (icon-only, pill active indicator) ──────────────────────
+
+class _HRGlassNavItem extends StatelessWidget {
+  final IconData     icon;
+  final String       label;
+  final bool         active;
+  final bool         isDark;
+  final VoidCallback onTap;
+
+  const _HRGlassNavItem({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const accent    = Color(0xFF6C47FF);
+    final iconColor = active
+        ? Colors.white
+        : (isDark ? const Color(0xFF8A94A6) : const Color(0xFF9AA3B2));
+
+    return Expanded(
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutBack,
+              width:  active ? 50 : 36,
+              height: active ? 38 : 30,
+              decoration: BoxDecoration(
+                color:        active ? accent : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color:      accent.withValues(alpha: 0.38),
+                          blurRadius: 10,
+                          offset:     const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Center(
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 200),
+                  scale: active ? 1.0 : 0.90,
+                  child: Icon(
+                    icon,
+                    size:  active ? 22 : 20,
+                    color: iconColor,
+                  ),
+                ),
               ),
             ),
-            Expanded(
-              child: BNItem(
-                icon:   Icons.history_rounded,
-                label:  l10n.history,
-                active: _active('/hr/history'),
-                isDark: isDark,
-                onTap:  () => navigationShell.goBranch(1),
-              ),
-            ),
-            Expanded(
-              child: BNItem(
-                icon:   Icons.menu_book_rounded,
-                label:  l10n.knowledgeBase,
-                active: _active('/hr/knowledge'),
-                isDark: isDark,
-                onTap:  () => navigationShell.goBranch(2),
-              ),
-            ),
-            Expanded(
-              child: BNItem(
-                icon:   Icons.account_circle_rounded,
-                label:  l10n.profile,
-                active: _active('/hr/profile'),
-                isDark: isDark,
-                onTap:  () => navigationShell.goBranch(3),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

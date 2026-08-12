@@ -113,7 +113,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
       if (verify.isExistingUser) {
         // Existing account → login directly
-        await ref.read(authProvider.notifier).loginWithGoogle(idToken);
+        await ref.read(authProvider.notifier).loginWithGoogle(
+          idToken,
+          googlePhotoUrl: account.photoUrl,
+        );
       } else {
         // New account → show profile completion sheet
         setState(() => _googleLoading = false);
@@ -127,6 +130,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         await ref.read(authProvider.notifier).loginWithGoogle(
           idToken,
           profile: profile,
+          googlePhotoUrl: account.photoUrl,
         );
       }
     } catch (_) {

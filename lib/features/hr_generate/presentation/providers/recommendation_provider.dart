@@ -14,28 +14,32 @@ class RecommendationFilter {
   final String? questionSetId;
   final RecommendationStatus? status;
   final int? minScore;
+  final String? sortBy;
 
   const RecommendationFilter({
     this.questionSetId,
     this.status,
     this.minScore,
+    this.sortBy,
   });
 
   RecommendationFilter copyWith({
     Object? questionSetId = _sentinel,
-    Object? status = _sentinel,
-    Object? minScore = _sentinel,
+    Object? status        = _sentinel,
+    Object? minScore      = _sentinel,
+    Object? sortBy        = _sentinel,
   }) =>
       RecommendationFilter(
         questionSetId: questionSetId == _sentinel
             ? this.questionSetId
             : questionSetId as String?,
-        status: status == _sentinel ? this.status : status as RecommendationStatus?,
+        status:  status  == _sentinel ? this.status  : status  as RecommendationStatus?,
         minScore: minScore == _sentinel ? this.minScore : minScore as int?,
+        sortBy:  sortBy  == _sentinel ? this.sortBy  : sortBy  as String?,
       );
 
   bool get isEmpty =>
-      questionSetId == null && status == null && minScore == null;
+      questionSetId == null && status == null && minScore == null && sortBy == null;
 }
 
 const _sentinel = Object();
@@ -52,6 +56,9 @@ class RecommendationFilterNotifier
 
   void setQuestionSetId(String? id) =>
       state = state.copyWith(questionSetId: id);
+
+  void setSortBy(String? sort) =>
+      state = state.copyWith(sortBy: sort);
 
   void reset() => state = const RecommendationFilter();
 }
@@ -121,6 +128,7 @@ class RecommendationListNotifier
         questionSetId: filter.questionSetId,
         status:        filter.status?.toApiString,
         minScore:      filter.minScore,
+        sortBy:        filter.sortBy,
         page:          0,
       );
       state = state.copyWith(
@@ -147,6 +155,7 @@ class RecommendationListNotifier
         questionSetId: _filter.questionSetId,
         status:        _filter.status?.toApiString,
         minScore:      _filter.minScore,
+        sortBy:        _filter.sortBy,
         page:          nextPage,
       );
       state = state.copyWith(

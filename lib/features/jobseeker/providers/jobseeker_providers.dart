@@ -39,9 +39,7 @@ class CandidateProfileState {
 // ── Profile Notifier ──────────────────────────────────────────────────────────
 
 class CandidateProfileNotifier extends StateNotifier<CandidateProfileState> {
-  CandidateProfileNotifier(this._ref) : super(const CandidateProfileState());
-
-  final Ref _ref;
+  CandidateProfileNotifier() : super(const CandidateProfileState());
 
   static const _baseUrl = AppConstants.apiBaseUrl;
 
@@ -93,7 +91,7 @@ class CandidateProfileNotifier extends StateNotifier<CandidateProfileState> {
 
 final candidateProfileProvider =
     StateNotifierProvider<CandidateProfileNotifier, CandidateProfileState>(
-  (ref) => CandidateProfileNotifier(ref),
+  (_) => CandidateProfileNotifier(),
 );
 
 // ── Practice Session State ────────────────────────────────────────────────────
@@ -1163,3 +1161,458 @@ final setDetailProvider =
     rethrow;
   }
 });
+
+// ── Bookmarks (Saved Sets) ────────────────────────────────────────────────────
+
+class SavedSetsState {
+  final List<QuestionSet> sets;
+  final bool isLoading;
+  final String? error;
+  final Set<String> pendingRemove; // ids currently being removed (optimistic)
+
+  const SavedSetsState({
+    this.sets = const [],
+    this.isLoading = false,
+    this.error,
+    this.pendingRemove = const {},
+  });
+
+  SavedSetsState copyWith({
+    List<QuestionSet>? sets,
+    bool? isLoading,
+    String? error,
+    Set<String>? pendingRemove,
+    bool clearError = false,
+  }) => SavedSetsState(
+    sets: sets ?? this.sets,
+    isLoading: isLoading ?? this.isLoading,
+    error: clearError ? null : (error ?? this.error),
+    pendingRemove: pendingRemove ?? this.pendingRemove,
+  );
+
+  List<QuestionSet> get displayed =>
+      sets.where((s) => !pendingRemove.contains(s.id)).toList();
+}
+
+class SavedSetsNotifier extends StateNotifier<SavedSetsState> {
+  SavedSetsNotifier() : super(const SavedSetsState()) {
+    load();
+  }
+
+  Future<void> load() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final dio = buildGenerationDio();
+      final res = await dio.get('/api/candidate/bookmarks');
+      final raw = res.data;
+      List<dynamic> list;
+      if (raw is List) {
+        list = raw;
+      } else if (raw is Map) {
+        final d = raw['data'];
+        if (d is List) {
+          list = d;
+        } else if (d is Map) {
+          list = (d['items'] ?? d['content'] ?? d['data'] ?? []) as List;
+        } else {
+          for (final k in ['items', 'content', 'result']) {
+            if (raw[k] is List) { list = raw[k] as List; break; }
+          }
+          list = [];
+        }
+      } else {
+        list = [];
+      }
+      // Each item may be the set itself or a wrapper { questionSet: {...} }
+      final sets = list.whereType<Map<String, dynamic>>().map((item) {
+        final inner = item['questionSet'] as Map<String, dynamic>? ?? item;
+        return QuestionSet.fromJson(inner);
+      }).where((s) => s.id.isNotEmpty).toList();
+      if (mounted) { state = state.copyWith(sets: sets, isLoading: false); }
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          error: e is DioException
+              ? 'Không tải được danh sách đã lưu (${e.response?.statusCode ?? "lỗi mạng"})'
+              : e.toString(),
+        );
+      }
+    }
+  }
+
+  /// Toggle bookmark off for [setId]. Returns true on success.
+  Future<bool> removeBookmark(String setId) async {
+    // Optimistic removal
+    state = state.copyWith(
+      pendingRemove: {...state.pendingRemove, setId},
+    );
+    try {
+      final dio = buildGenerationDio();
+      await dio.post('/api/candidate/question-sets/$setId/bookmark');
+      // Confirm removal from list
+      if (mounted) {
+        state = state.copyWith(
+          sets: state.sets.where((s) => s.id != setId).toList(),
+          pendingRemove: state.pendingRemove.difference({setId}),
+        );
+      }
+      return true;
+    } catch (_) {
+      // Rollback
+      if (mounted) {
+        state = state.copyWith(
+          pendingRemove: state.pendingRemove.difference({setId}),
+        );
+      }
+      return false;
+    }
+  }
+}
+
+final savedSetsProvider =
+    StateNotifierProvider<SavedSetsNotifier, SavedSetsState>(
+  (_) => SavedSetsNotifier(),
+);
+
+// ── Bookmarked set IDs (lightweight, for marker in marketplace) ───────────────
+
+final bookmarkedSetIdsProvider = FutureProvider<Set<String>>((ref) async {
+  try {
+    final dio = buildGenerationDio();
+    final res = await dio.get('/api/candidate/bookmarks');
+    final raw = res.data;
+    List<dynamic> list;
+    if (raw is List) {
+      list = raw;
+    } else if (raw is Map) {
+      final d = raw['data'];
+      list = d is List ? d : (raw['items'] as List? ?? []);
+    } else {
+      list = [];
+    }
+    return list.whereType<Map>().map((item) {
+      final inner = item['questionSet'] as Map? ?? item;
+      return (inner['id'] ?? inner['questionSetId'] ?? '').toString();
+    }).where((id) => id.isNotEmpty).toSet();
+  } catch (_) {
+    return const {};
+  }
+});
+
+// ── Bookmark toggle (per-set) ─────────────────────────────────────────────────
+
+/// Toggles bookmark for a set and returns the new bookmarked state (true = now bookmarked).
+Future<bool> toggleBookmark(String setId) async {
+  final dio = buildGenerationDio();
+  try {
+    final res = await dio.post('/api/candidate/question-sets/$setId/bookmark');
+    final raw = res.data;
+    if (raw is Map) {
+      final d = raw['data'] is Map ? raw['data'] as Map : raw;
+      final bookmarked = d['bookmarked'] ?? d['isBookmarked'] ?? d['saved'];
+      if (bookmarked is bool) return bookmarked;
+    }
+    // Interpret 201 as "bookmarked", 200 as "removed"
+    return res.statusCode == 201;
+  } catch (_) {
+    rethrow;
+  }
+}
+
+// ── Invitations ───────────────────────────────────────────────────────────────
+
+class InvitationsState {
+  final List<Invitation> invitations;
+  final bool isLoading;
+  final String? error;
+  final String activeTab; // 'all', 'pending', 'accepted', 'rejected'
+  final int page;
+  static const pageSize = 10;
+
+  const InvitationsState({
+    this.invitations = const [],
+    this.isLoading = false,
+    this.error,
+    this.activeTab = 'all',
+    this.page = 1,
+  });
+
+  InvitationsState copyWith({
+    List<Invitation>? invitations,
+    bool? isLoading,
+    String? error,
+    String? activeTab,
+    int? page,
+    bool clearError = false,
+  }) => InvitationsState(
+    invitations: invitations ?? this.invitations,
+    isLoading: isLoading ?? this.isLoading,
+    error: clearError ? null : (error ?? this.error),
+    activeTab: activeTab ?? this.activeTab,
+    page: page ?? this.page,
+  );
+
+  List<Invitation> get filtered {
+    if (activeTab == 'all') return invitations;
+    return invitations.where((i) {
+      switch (activeTab) {
+        case 'pending':  return i.status == InvitationStatus.pending;
+        case 'accepted': return i.status == InvitationStatus.accepted;
+        case 'rejected': return i.status == InvitationStatus.rejected;
+        default: return true;
+      }
+    }).toList();
+  }
+
+  List<Invitation> get paged {
+    final all = filtered;
+    final end = (page * pageSize).clamp(0, all.length);
+    return all.sublist(0, end);
+  }
+
+  int get pendingCount => invitations.where((i) => i.status == InvitationStatus.pending).length;
+  int get acceptedCount => invitations.where((i) => i.status == InvitationStatus.accepted).length;
+  int get rejectedCount => invitations.where((i) => i.status == InvitationStatus.rejected).length;
+  bool get hasMore => paged.length < filtered.length;
+}
+
+class InvitationsNotifier extends StateNotifier<InvitationsState> {
+  InvitationsNotifier() : super(const InvitationsState()) {
+    load();
+  }
+
+  Future<void> load() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final dio = buildGenerationDio();
+      final res = await dio.get('/api/candidate/invitations');
+      final raw = res.data;
+      List<dynamic> list;
+      if (raw is List) {
+        list = raw;
+      } else if (raw is Map) {
+        final d = raw['data'];
+        if (d is List) {
+          list = d;
+        } else if (d is Map) {
+          list = (d['items'] ?? d['content'] ?? []) as List;
+        } else {
+          list = (raw['items'] ?? raw['content'] ?? []) as List;
+        }
+      } else {
+        list = [];
+      }
+      final invitations = list
+          .whereType<Map<String, dynamic>>()
+          .map(Invitation.fromJson)
+          .where((i) => i.id.isNotEmpty)
+          .toList();
+      if (mounted) { state = state.copyWith(invitations: invitations, isLoading: false); }
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          error: e is DioException
+              ? 'Không tải được lời mời (${e.response?.statusCode ?? "lỗi mạng"})'
+              : e.toString(),
+        );
+      }
+    }
+  }
+
+  void setTab(String tab) => state = state.copyWith(activeTab: tab, page: 1);
+  void loadMore() {
+    if (state.hasMore) state = state.copyWith(page: state.page + 1);
+  }
+
+  Future<bool> accept(String invitationId, {String? responseMessage, String? phoneNumber}) async {
+    try {
+      final dio = buildGenerationDio();
+      final body = <String, dynamic>{};
+      if (responseMessage != null && responseMessage.isNotEmpty) {
+        body['responseMessage'] = responseMessage;
+      }
+      if (phoneNumber != null && phoneNumber.isNotEmpty) {
+        body['phoneNumber'] = phoneNumber;
+      }
+      await dio.post('/api/candidate/invitations/$invitationId/accept', data: body);
+      _updateStatus(invitationId, InvitationStatus.accepted, responseMessage: responseMessage);
+      return true;
+    } catch (_) { return false; }
+  }
+
+  Future<bool> reject(String invitationId) async {
+    try {
+      final dio = buildGenerationDio();
+      await dio.post('/api/candidate/invitations/$invitationId/reject');
+      _updateStatus(invitationId, InvitationStatus.rejected);
+      return true;
+    } catch (_) { return false; }
+  }
+
+  void _updateStatus(String id, InvitationStatus status, {String? responseMessage}) {
+    if (!mounted) return;
+    final updated = state.invitations.map((inv) {
+      if (inv.id == id) return inv.copyWith(status: status, responseMessage: responseMessage);
+      return inv;
+    }).toList();
+    state = state.copyWith(invitations: updated);
+  }
+}
+
+final invitationsProvider =
+    StateNotifierProvider<InvitationsNotifier, InvitationsState>(
+  (_) => InvitationsNotifier(),
+);
+
+final pendingInvitationsCountProvider = Provider<int>((ref) {
+  return ref.watch(invitationsProvider).pendingCount;
+});
+
+/// `true` while any bottom-sheet/detail panel in the Jobseeker shell is open.
+/// The shell watches this to slide the nav bar off-screen.
+final navBarHiddenProvider = StateProvider<bool>((ref) => false);
+
+// ── Gamification ──────────────────────────────────────────────────────────────
+
+class GamificationState {
+  final UserProgress? progress;
+  final List<GamificationAchievement> achievements;
+  final bool isLoading;
+  final String? error;
+
+  const GamificationState({
+    this.progress,
+    this.achievements = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  GamificationState copyWith({
+    UserProgress? progress,
+    List<GamificationAchievement>? achievements,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) =>
+      GamificationState(
+        progress:     progress ?? this.progress,
+        achievements: achievements ?? this.achievements,
+        isLoading:    isLoading ?? this.isLoading,
+        error:        clearError ? null : (error ?? this.error),
+      );
+
+  int get earnedCount => achievements.where((a) => a.unlocked).length;
+}
+
+class GamificationNotifier extends StateNotifier<GamificationState> {
+  GamificationNotifier() : super(const GamificationState()) {
+    load();
+  }
+
+  static const _progressPath     = '/api/candidate/gamification/progress';
+  static const _achievementsPath = '/api/candidate/gamification/achievements';
+
+  Future<void> load() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final dio = buildGenerationDio();
+      final results = await Future.wait([
+        dio.get(_progressPath),
+        dio.get(_achievementsPath),
+      ]);
+
+      // Progress: wrapped in {data: ...}
+      final progressRaw = results[0].data;
+      final progress = UserProgress.fromJson(
+        progressRaw is Map<String, dynamic> ? progressRaw : const {},
+      );
+
+      // Achievements: list or wrapped
+      final achRaw = results[1].data;
+      List<dynamic> achList;
+      if (achRaw is List) {
+        achList = achRaw;
+      } else if (achRaw is Map) {
+        final d = achRaw['data'];
+        achList = d is List ? d : ((achRaw['items'] ?? []) as List);
+      } else {
+        achList = const [];
+      }
+
+      // Build full list: merge API data with known codes (so locked ones appear)
+      const knownCodes = [
+        'FIRST_STEP', 'ON_FIRE', 'EXCELLENT_ANSWER', 'DEDICATED',
+        'TECHNICAL_MIND', 'SYSTEM_THINKER', 'CONSISTENCY', 'INTERVIEW_VETERAN',
+      ];
+      final apiMap = <String, GamificationAchievement>{};
+      for (final item in achList.whereType<Map<String, dynamic>>()) {
+        final a = GamificationAchievement.fromJson(item);
+        if (a.code.isNotEmpty) apiMap[a.code] = a;
+      }
+      final achievements = knownCodes.map((code) {
+        return apiMap[code] ??
+            GamificationAchievement(
+              id:          code,
+              code:        code,
+              name:        achievementName(code),
+              description: achievementDescription(code),
+              icon:        achievementIcon(code),
+              unlocked:    false,
+            );
+      }).toList();
+
+      if (mounted) {
+        state = state.copyWith(
+          progress: progress,
+          achievements: achievements,
+          isLoading: false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          error: e is DioException
+              ? 'Không tải được dữ liệu (${e.response?.statusCode ?? "lỗi mạng"})'
+              : e.toString(),
+        );
+      }
+    }
+  }
+
+  Future<void> refresh() => load();
+
+  Future<bool> updateDailyGoal(int xp) async {
+    try {
+      final dio = buildGenerationDio();
+      await dio.patch(
+        '/api/candidate/gamification/daily-goal',
+        data: {'dailyGoalXp': xp},
+      );
+      if (mounted && state.progress != null) {
+        // Optimistic update
+        final p = state.progress!;
+        state = state.copyWith(
+          progress: UserProgress(
+            totalXp: p.totalXp, level: p.level, currentLevelXp: p.currentLevelXp,
+            xpRequiredForNextLevel: p.xpRequiredForNextLevel,
+            progressPercentage: p.progressPercentage, currentStreak: p.currentStreak,
+            longestStreak: p.longestStreak, dailyGoalXp: xp,
+            todayXp: p.todayXp, dailyGoalCompleted: p.dailyGoalCompleted,
+            totalPracticeSessions: p.totalPracticeSessions, nextLevel: p.nextLevel,
+          ),
+        );
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+final gamificationProvider =
+    StateNotifierProvider<GamificationNotifier, GamificationState>(
+  (_) => GamificationNotifier(),
+);

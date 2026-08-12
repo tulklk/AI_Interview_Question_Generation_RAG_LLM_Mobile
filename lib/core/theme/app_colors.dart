@@ -42,6 +42,35 @@ class AppColors {
   static const Color darkSurface = Color(0xFF111827);
   static const Color darkCard = Color(0xFF1A1F35);
   static const Color darkCardBorder = Color(0xFF2D3562);
+  static const Color darkAppBar = Color(0xFF0B1020);
+  static const Color darkChip = Color(0xFF1E2640);
+
+  // Light mode surfaces
+  static const Color scaffoldLight = Color(0xFFF4F5FB);
+  static const Color surfaceLight = Color(0xFFF8FAFC);
+
+  // Theme helpers
+  static Color scaffoldBg(bool isDark) => isDark ? darkBg : scaffoldLight;
+  static Color surfaceBg(bool isDark) => isDark ? darkBg : surfaceLight;
+  static Color cardBg(bool isDark) => isDark ? darkCard : white;
+  static Color appBarBg(bool isDark) => isDark ? darkAppBar : white;
+  static Color borderColor(bool isDark) => isDark ? darkCardBorder : gray200;
+  static Color textPrimary(bool isDark) => isDark ? white : nearBlack;
+  static Color textMuted(bool isDark) => isDark ? gray400 : gray500;
+  static Color chipBg(bool isDark) => isDark ? darkChip : gray100;
+
+  // ── Liquid-glass surfaces ─────────────────────────────────────────────────
+  /// Card background for the glass effect (dark mode)
+  static Color glassCardDark  = const Color(0xFF1A1D2E).withValues(alpha: 0.70);
+  /// Card background for the glass effect (light mode)
+  static Color glassCardLight = const Color(0xFFFFFFFF).withValues(alpha: 0.62);
+  /// Card border (dark)
+  static Color glassBorderDark  = Colors.white.withValues(alpha: 0.10);
+  /// Card border (light)
+  static Color glassBorderLight = const Color(0xFF6C47FF).withValues(alpha: 0.09);
+
+  static Color glassCard(bool isDark)   => isDark ? glassCardDark  : glassCardLight;
+  static Color glassBorder(bool isDark) => isDark ? glassBorderDark : glassBorderLight;
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(

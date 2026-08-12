@@ -39,7 +39,7 @@ class _InterviewsScreenState extends ConsumerState<InterviewsScreen> {
         .toList();
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

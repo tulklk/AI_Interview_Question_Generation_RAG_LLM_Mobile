@@ -177,7 +177,7 @@ class _HRProfileScreenState extends ConsumerState<HRProfileScreen> {
     final theme  = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: theme ? AppColors.darkBg : AppColors.offWhite,
+      backgroundColor: Colors.transparent,
       body: CustomScrollView(
         slivers: [
           // ── Header ──────────────────────────────────────────────────────

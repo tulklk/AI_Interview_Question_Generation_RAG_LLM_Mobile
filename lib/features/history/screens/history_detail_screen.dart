@@ -2,12 +2,14 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/grid_background.dart';
 import '../../hr_generate/ask_ai/widgets/ask_ai_panel.dart';
 import '../../hr_generate/data/generation_api.dart';
-import '../../hr_generate/data/generation_repository.dart';
+import '../../hr_generate/data/studio_repository.dart';
 import '../../hr_generate/domain/enums/difficulty_level.dart';
 import '../../hr_generate/domain/enums/question_type.dart';
 import '../../hr_generate/domain/models/generated_question.dart';
+import '../../hr_generate/domain/models/studio_models.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +78,14 @@ class DetailSession {
       questionSetId:  qSetId,
     );
   }
+
+  factory DetailSession.fromStudioProject(StudioProjectDetail p) =>
+      DetailSession(
+        id:            p.id,
+        jobTitle:      p.name,
+        status:        p.status.toApiString(),
+        questionSetId: p.questionSetId,
+      );
 }
 
 class EditableQuestion {
@@ -126,17 +136,21 @@ class DetailState {
   final bool isExporting;
   final bool isPublishing;
   final bool isPublished;
+  final bool isBookmarked;
+  final bool isRenaming;
   final String? error;
   final String? successMsg;
 
   const DetailState({
     this.session,
-    this.questions   = const [],
-    this.isLoading   = true,
-    this.isSaving    = false,
-    this.isExporting = false,
+    this.questions    = const [],
+    this.isLoading    = true,
+    this.isSaving     = false,
+    this.isExporting  = false,
     this.isPublishing = false,
     this.isPublished  = false,
+    this.isBookmarked = false,
+    this.isRenaming   = false,
     this.error,
     this.successMsg,
   });
@@ -149,6 +163,8 @@ class DetailState {
     bool? isExporting,
     bool? isPublishing,
     bool? isPublished,
+    bool? isBookmarked,
+    bool? isRenaming,
     String? error,
     String? successMsg,
     bool clearMsg = false,
@@ -161,6 +177,8 @@ class DetailState {
         isExporting:  isExporting  ?? this.isExporting,
         isPublishing: isPublishing ?? this.isPublishing,
         isPublished:  isPublished  ?? this.isPublished,
+        isBookmarked: isBookmarked ?? this.isBookmarked,
+        isRenaming:   isRenaming   ?? this.isRenaming,
         error:        error,
         successMsg:   clearMsg ? null : (successMsg ?? this.successMsg),
       );
@@ -173,66 +191,75 @@ class DetailState {
 
 class DetailNotifier extends StateNotifier<DetailState> {
   final String sessionId;
-  final GenerationRepository _repo = GenerationRepository();
+  final StudioRepository _studioRepo = StudioRepository();
 
   DetailNotifier(this.sessionId) : super(const DetailState()) { _load(); }
 
-  static bool _shouldLoadQuestions(String status) {
-    final s = status.toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
-    const withQuestions = {
-      'COMPLETED', 'DONE', 'SUCCESS', 'DRAFT_SAVED', 'DRAFT',
-    };
-    return withQuestions.contains(s) || s.contains('COMPLET');
-  }
+  static bool _shouldLoadQuestions(StudioProjectStatus status) =>
+      status == StudioProjectStatus.generated ||
+      status == StudioProjectStatus.approved;
 
-  static EditableQuestion _fromGenerated(GeneratedQuestion q) =>
+  static EditableQuestion _fromStudioQuestion(StudioQuestion q) =>
       EditableQuestion(
         id:   q.id.isNotEmpty ? q.id : null,
         data: {
           'id':           q.id,
-          'question':     q.question,
-          'questionType': q.questionType.toApiString(),
+          'question':     q.content,
+          'questionType': q.type.toApiString(),
           'difficulty':   q.difficulty.toApiString(),
-          if (q.rationale != null) 'rationale': q.rationale,
-          if (q.sampleAnswer != null) 'sampleAnswer': q.sampleAnswer,
+          if (q.expectedAnswer != null) 'sampleAnswer': q.expectedAnswer,
+          if (q.scoringRubric != null) 'rationale': q.scoringRubric,
           'orderIndex': q.orderIndex,
           'order':      q.orderIndex,
         },
       );
 
-  static List<EditableQuestion> _fromRawQuestionList(dynamic raw) {
-    List<dynamic>? list;
-    if (raw is List) {
-      list = raw;
-    } else if (raw is Map) {
-      var m = raw;
-      for (var i = 0; i < 4; i++) {
-        if (m['data'] is Map) {
-          m = m['data'] as Map;
-          continue;
-        }
-        if (m['result'] is Map) {
-          m = m['result'] as Map;
-          continue;
-        }
-        break;
+
+  Future<void> _load() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final project = await _studioRepo.getProject(sessionId);
+      var session = DetailSession.fromStudioProject(project);
+
+      List<EditableQuestion> questions = [];
+      bool isPublished  = project.isPublished;
+
+      if (_shouldLoadQuestions(project.status)) {
+        final studioQs = await _studioRepo.listQuestions(sessionId);
+        questions = studioQs.map(_fromStudioQuestion).toList();
       }
-      if (m['questions'] is List) {
-        list = m['questions'] as List;
-      } else if (m['items'] is List) {
-        list = m['items'] as List;
-      } else if (m['data'] is List) {
-        list = m['data'] as List;
+
+      if (project.questionSetId != null) {
+        final qSetInfo = await _fetchQuestionSetInfo(project.questionSetId!);
+        isPublished = qSetInfo.isPublished;
+        if (qSetInfo.title != null) {
+          session = session.withQuestionSetTitle(qSetInfo.title!);
+        }
+        if (mounted) {
+          state = state.copyWith(
+            session:      session,
+            questions:    questions,
+            isLoading:    false,
+            isPublished:  isPublished,
+            isBookmarked: qSetInfo.isBookmarked,
+          );
+        }
+      } else {
+        if (mounted) {
+          state = state.copyWith(
+            session:   session,
+            questions: questions,
+            isLoading: false,
+            isPublished: isPublished,
+          );
+        }
       }
+    } catch (e) {
+      if (mounted) state = state.copyWith(isLoading: false, error: _err(e));
     }
-    if (list == null) return [];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map((q) => _fromGenerated(GeneratedQuestion.fromJson(q)))
-        .toList();
   }
 
-  Future<({bool isPublished, String? title})> _fetchQuestionSetInfo(String questionSetId) async {
+  Future<({bool isPublished, bool isBookmarked, String? title})> _fetchQuestionSetInfo(String questionSetId) async {
     try {
       final dio = buildGenerationDio();
       final res = await dio.get('/api/hr/question-sets/$questionSetId');
@@ -247,83 +274,14 @@ class DetailNotifier extends StateNotifier<DetailState> {
           final rawStatus = (data['status'] ?? '').toString().toUpperCase();
           isPublished = rawStatus == 'PUBLISHED' || data['publishedAt'] != null;
         }
-        return (isPublished: isPublished, title: data['title']?.toString());
+        return (
+          isPublished:  isPublished,
+          isBookmarked: data['isBookmarked'] as bool? ?? false,
+          title:        data['title']?.toString(),
+        );
       }
     } catch (_) {}
-    return (isPublished: false, title: null);
-  }
-
-  Future<List<EditableQuestion>> _fetchQuestions(
-    String jobId,
-    String? questionSetId,
-    List<GeneratedQuestion> inline,
-  ) async {
-    if (inline.isNotEmpty) {
-      return inline.map(_fromGenerated).toList();
-    }
-
-    for (final id in [jobId, if (questionSetId != null && questionSetId != jobId) questionSetId]) {
-      try {
-        final qs = await _repo.getQuestions(id);
-        if (qs.isNotEmpty) return qs.map(_fromGenerated).toList();
-      } catch (_) {}
-
-      try {
-        final dio = buildGenerationDio();
-        final qRes = await dio.get(
-            '/api/hr/question-generation-jobs/$id/questions');
-        final parsed = _fromRawQuestionList(qRes.data);
-        if (parsed.isNotEmpty) return parsed;
-      } catch (_) {}
-    }
-
-    return [];
-  }
-
-  Future<void> _load() async {
-    state = state.copyWith(isLoading: true, error: null);
-    try {
-      final genSession = await _repo.getSession(sessionId);
-
-      var session = DetailSession(
-        id: genSession.id.isNotEmpty ? genSession.id : sessionId,
-        jobTitle: genSession.jobTitle.isNotEmpty ? genSession.jobTitle : null,
-        status: genSession.rawPhase.isNotEmpty
-            ? genSession.rawPhase
-            : genSession.status.name,
-        planDraft: genSession.planDraft?.toJson(),
-        questionSetId: genSession.questionSetId,
-      );
-
-      List<EditableQuestion> questions = [];
-      if (_shouldLoadQuestions(session.status)) {
-        questions = await _fetchQuestions(
-          session.id.isNotEmpty ? session.id : sessionId,
-          session.questionSetId,
-          genSession.generatedQuestions,
-        );
-      }
-
-      bool isPublished = session.status.toUpperCase() == 'PUBLISHED';
-      if (session.questionSetId != null) {
-        final info = await _fetchQuestionSetInfo(session.questionSetId!);
-        isPublished = info.isPublished;
-        if (info.title != null) {
-          session = session.withQuestionSetTitle(info.title!);
-        }
-      }
-
-      if (mounted) {
-        state = state.copyWith(
-          session:     session,
-          questions:   questions,
-          isLoading:   false,
-          isPublished: isPublished,
-        );
-      }
-    } catch (e) {
-      if (mounted) state = state.copyWith(isLoading: false, error: _err(e));
-    }
+    return (isPublished: false, isBookmarked: false, title: null);
   }
 
   void toggleExpand(int index) {
@@ -399,73 +357,34 @@ class DetailNotifier extends StateNotifier<DetailState> {
   Future<void> save() async {
     state = state.copyWith(isSaving: true, error: null, clearMsg: true);
     try {
-      final dio = buildGenerationDio();
-      final qs  = state.questions;
+      final qs = state.questions;
 
-      // 1. Delete
+      // 1. Delete removed questions via Studio V2
       for (final q in qs.where((q) => q.isDeleted && q.id != null)) {
-        await dio.delete(
-            '/api/hr/question-generation-jobs/$sessionId/questions/${q.id}');
+        await _studioRepo.deleteQuestion(sessionId, q.id!);
       }
 
-      // 2. POST new questions and collect their new IDs
-      final newIds = <String?>[];
-      for (final q in qs.where((q) => q.isNew && !q.isDeleted)) {
-        try {
-          final res = await dio.post(
-            '/api/hr/question-generation-jobs/$sessionId/questions',
-            data: q.data,
-          );
-          final body = res.data;
-          final newId = (body is Map
-                  ? (body['data']?['id'] ?? body['id'])
-                  : null)
-              ?.toString();
-          newIds.add(newId);
-        } catch (_) {
-          newIds.add(null);
-        }
-      }
-
-      // 3. PUT edited questions
+      // 2. PUT edited questions via Studio V2
       for (final q in qs.where((q) => q.isDirty && !q.isDeleted && q.id != null)) {
-        await dio.put(
-          '/api/hr/question-generation-jobs/$sessionId/questions/${q.id}',
-          data: q.data,
-        );
+        final d = q.data;
+        await _studioRepo.updateQuestion(sessionId, q.id!, {
+          'content':    d['question'] ?? d['content'] ?? '',
+          'difficulty': d['difficulty'] ?? 'Medium',
+          'type':       d['questionType'] ?? d['type'] ?? 'Technical',
+          if (d['sampleAnswer'] != null) 'expectedAnswer': d['sampleAnswer'],
+          if (d['rationale'] != null) 'scoringRubric': d['rationale'],
+        });
       }
 
-      // 4. Reorder surviving questions
-      final survivingIds = qs
-          .where((q) => !q.isDeleted)
-          .map((q) => q.id)
-          .whereType<String>()
-          .toList();
-      if (survivingIds.length > 1) {
-        await dio.put(
-          '/api/hr/question-generation-jobs/$sessionId/questions/reorder',
-          data: survivingIds
-              .asMap()
-              .entries
-              .map((e) => {'id': e.value, 'order': e.key})
-              .toList(),
-        );
-      }
-
-      // 5. Save draft
-      await dio.post(
-          '/api/hr/question-generation-jobs/$sessionId/save-draft');
+      // 3. Save draft (snapshot)
+      await _studioRepo.saveProject(sessionId);
 
       if (mounted) {
-        // Reset dirty flags and reload
         await _load();
-        state = state.copyWith(
-            isSaving: false, successMsg: 'Đã lưu thành công');
+        state = state.copyWith(isSaving: false, successMsg: 'Đã lưu thành công');
       }
     } catch (e) {
-      if (mounted) {
-        state = state.copyWith(isSaving: false, error: _err(e));
-      }
+      if (mounted) state = state.copyWith(isSaving: false, error: _err(e));
     }
   }
 
@@ -501,13 +420,44 @@ class DetailNotifier extends StateNotifier<DetailState> {
 
   void clearMessages() => state = state.copyWith(error: null, clearMsg: true);
 
-  Future<void> publish() async {
+  Future<void> toggleBookmark() async {
     final qSetId = state.session?.questionSetId;
-    if (qSetId == null || state.isPublishing) return;
-    state = state.copyWith(isPublishing: true, error: null);
+    if (qSetId == null) return;
+    final newVal = !state.isBookmarked;
+    state = state.copyWith(isBookmarked: newVal);
     try {
       final dio = buildGenerationDio();
-      await dio.post('/api/hr/question-sets/$qSetId/publish');
+      await dio.post('/api/hr/question-sets/$qSetId/bookmark');
+    } catch (e) {
+      if (mounted) state = state.copyWith(isBookmarked: !newVal, error: _err(e));
+    }
+  }
+
+  Future<void> renameTitle(String newTitle) async {
+    final qSetId  = state.session?.questionSetId;
+    if (qSetId == null) return;
+    final trimmed = newTitle.trim();
+    if (trimmed.isEmpty || trimmed.length > 500) return;
+    state = state.copyWith(isRenaming: true, error: null, clearMsg: true);
+    try {
+      final dio = buildGenerationDio();
+      await dio.put('/api/hr/question-sets/$qSetId/title',
+          data: {'title': trimmed});
+      if (mounted) await _load();
+      if (mounted) {
+        state = state.copyWith(
+            isRenaming: false, successMsg: 'Đã đổi tên thành công');
+      }
+    } catch (e) {
+      if (mounted) state = state.copyWith(isRenaming: false, error: _err(e));
+    }
+  }
+
+  Future<void> publish() async {
+    if (state.isPublishing) return;
+    state = state.copyWith(isPublishing: true, error: null);
+    try {
+      await _studioRepo.publishProject(sessionId);
       if (mounted) {
         state = state.copyWith(
           isPublishing: false,
@@ -517,7 +467,6 @@ class DetailNotifier extends StateNotifier<DetailState> {
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) {
-        // Already published — treat as success
         if (mounted) {
           state = state.copyWith(
             isPublishing: false,
@@ -534,12 +483,10 @@ class DetailNotifier extends StateNotifier<DetailState> {
   }
 
   Future<void> unpublish() async {
-    final qSetId = state.session?.questionSetId;
-    if (qSetId == null || state.isPublishing) return;
+    if (state.isPublishing) return;
     state = state.copyWith(isPublishing: true, error: null);
     try {
-      final dio = buildGenerationDio();
-      await dio.post('/api/hr/question-sets/$qSetId/unpublish');
+      await _studioRepo.unpublishProject(sessionId);
       if (mounted) {
         state = state.copyWith(
           isPublishing: false,
@@ -548,9 +495,7 @@ class DetailNotifier extends StateNotifier<DetailState> {
         );
       }
     } catch (e) {
-      if (mounted) {
-        state = state.copyWith(isPublishing: false, error: _err(e));
-      }
+      if (mounted) state = state.copyWith(isPublishing: false, error: _err(e));
     }
   }
 
@@ -571,6 +516,24 @@ final detailProvider = StateNotifierProvider.autoDispose
     .family<DetailNotifier, DetailState, String>(
   (_, id) => DetailNotifier(id),
 );
+
+final _practitionersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, qSetId) async {
+  final dio = buildGenerationDio();
+  final res = await dio.get('/api/hr/question-sets/$qSetId/practitioners');
+  dynamic data = res.data;
+  for (var i = 0; i < 4; i++) {
+    if (data is Map && data['data'] != null) { data = data['data']; continue; }
+    break;
+  }
+  List list = [];
+  if (data is List) {
+    list = data;
+  } else if (data is Map) {
+    list = (data['items'] ?? data['practitioners'] ?? data['data'] ?? []) as List;
+  }
+  return list.whereType<Map<String, dynamic>>().toList();
+});
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -642,30 +605,43 @@ class HistoryDetailScreen extends ConsumerWidget {
                   notifier.exportFile(v);
                 } else if (v == 'ai') {
                   _openAiPanel(context, sessionId, isDark);
+                } else if (v == 'rename') {
+                  _openRenameDialog(
+                      context, notifier, session?.displayTitle ?? '', isDark);
                 }
               },
               itemBuilder: (_) => [
-                if (session?.questionSetId != null || true) ...[
+                if (session?.questionSetId != null) ...[
                   PopupMenuItem(
-                    value: 'pdf',
+                    value: 'rename',
                     child: Row(children: const [
-                      Icon(Icons.picture_as_pdf_rounded,
-                          color: Color(0xFFEF4444), size: 18),
+                      Icon(Icons.drive_file_rename_outline_rounded,
+                          color: Color(0xFF6C47FF), size: 18),
                       SizedBox(width: 8),
-                      Text('Xuất PDF'),
-                    ]),
-                  ),
-                  PopupMenuItem(
-                    value: 'excel',
-                    child: Row(children: const [
-                      Icon(Icons.table_chart_rounded,
-                          color: Color(0xFF10B981), size: 18),
-                      SizedBox(width: 8),
-                      Text('Xuất Excel'),
+                      Text('Đổi tên'),
                     ]),
                   ),
                   const PopupMenuDivider(),
                 ],
+                PopupMenuItem(
+                  value: 'pdf',
+                  child: Row(children: const [
+                    Icon(Icons.picture_as_pdf_rounded,
+                        color: Color(0xFFEF4444), size: 18),
+                    SizedBox(width: 8),
+                    Text('Xuất PDF'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'excel',
+                  child: Row(children: const [
+                    Icon(Icons.table_chart_rounded,
+                        color: Color(0xFF10B981), size: 18),
+                    SizedBox(width: 8),
+                    Text('Xuất Excel'),
+                  ]),
+                ),
+                const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'ai',
                   child: Row(children: const [
@@ -753,9 +729,24 @@ class HistoryDetailScreen extends ConsumerWidget {
                       ),
                     ),
             ),
+          // Bookmark toggle
+          if (session?.questionSetId != null)
+            IconButton(
+              icon: Icon(
+                dState.isBookmarked
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_border_rounded,
+                color: dState.isBookmarked
+                    ? const Color(0xFF6C47FF)
+                    : (isDark ? Colors.white70 : const Color(0xFF6B7280)),
+              ),
+              onPressed: notifier.toggleBookmark,
+              tooltip: dState.isBookmarked ? 'Bỏ lưu' : 'Lưu bộ câu hỏi',
+            ),
         ],
       ),
-      body: dState.isLoading
+      body: GridBackdrop(
+        child: dState.isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF6C47FF)))
           : CustomScrollView(
@@ -819,6 +810,16 @@ class HistoryDetailScreen extends ConsumerWidget {
                             notifier:  notifier,
                             sessionId: sessionId,
                           ),
+
+                        // Practitioners section (published sets only)
+                        if (session.questionSetId != null &&
+                            dState.isPublished) ...[
+                          const SizedBox(height: 20),
+                          _PractitionersSection(
+                            qSetId: session.questionSetId!,
+                            isDark: isDark,
+                          ),
+                        ],
                       ],
                       const SizedBox(height: 16),
                     ]),
@@ -826,6 +827,7 @@ class HistoryDetailScreen extends ConsumerWidget {
                 ),
               ],
             ),
+      ),
     );
   }
 
@@ -893,6 +895,52 @@ class HistoryDetailScreen extends ConsumerWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _AiPanel(sessionId: sId, isDark: isDark),
     );
+  }
+
+  Future<void> _openRenameDialog(
+    BuildContext context,
+    DetailNotifier notifier,
+    String currentTitle,
+    bool isDark,
+  ) async {
+    final ctrl = TextEditingController(text: currentTitle);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1A1F35) : Colors.white,
+        title: Text('Đổi tên bộ câu hỏi',
+            style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF111827))),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 500,
+          style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF111827)),
+          decoration: const InputDecoration(hintText: 'Tên mới...'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Hủy',
+                style: TextStyle(
+                    color: isDark
+                        ? const Color(0xFF9CA3AF)
+                        : const Color(0xFF6B7280))),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF6C47FF)),
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (title != null && title.trim().isNotEmpty) {
+      notifier.renameTitle(title);
+    }
   }
 }
 
@@ -2272,4 +2320,174 @@ class _SmallBadge extends StatelessWidget {
                 fontSize:   10,
                 fontWeight: FontWeight.w600)),
       );
+}
+
+// ── Practitioners ─────────────────────────────────────────────────────────────
+
+class _PractitionersSection extends ConsumerWidget {
+  final String qSetId;
+  final bool isDark;
+  const _PractitionersSection({required this.qSetId, required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(_practitionersProvider(qSetId));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.people_rounded, size: 16, color: Color(0xFF6C47FF)),
+          const SizedBox(width: 6),
+          Text(
+            'Ứng viên đã luyện tập',
+            style: TextStyle(
+              color:      isDark ? Colors.white : const Color(0xFF111827),
+              fontSize:   16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        async.when(
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child:   CircularProgressIndicator(
+                  color: Color(0xFF6C47FF), strokeWidth: 2),
+            ),
+          ),
+          error: (e, _) => Text(
+            'Không tải được danh sách: $e',
+            style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 12),
+          ),
+          data: (list) => list.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.person_outline_rounded,
+                            size: 40,
+                            color: isDark
+                                ? const Color(0xFF2D3562)
+                                : const Color(0xFFD1D5DB)),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Chưa có ứng viên nào luyện tập',
+                          style: TextStyle(
+                              color: isDark
+                                  ? const Color(0xFF6B7280)
+                                  : const Color(0xFF9CA3AF),
+                              fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
+                  children: list
+                      .map((p) => _PractitionerTile(data: p, isDark: isDark))
+                      .toList(),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PractitionerTile extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final bool isDark;
+  const _PractitionerTile({required this.data, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final name      = (data['candidateName'] ?? data['name'] ?? data['userName'] ?? 'Ứng viên').toString();
+    final score     = data['score'] ?? data['totalScore'];
+    final completed = data['completedAt'] ?? data['submittedAt'];
+    final duration  = data['duration'] ?? data['timeTaken'];
+    final status    = (data['status'] ?? '').toString().toUpperCase();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color:        isDark ? const Color(0xFF111827) : const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(10),
+        border:       Border.all(
+            color: isDark
+                ? const Color(0xFF2D3562)
+                : const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width:  36,
+            height: 36,
+            decoration: const BoxDecoration(
+              color: Color(0x1A6C47FF),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: const TextStyle(
+                    color: Color(0xFF6C47FF), fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name,
+                    style: TextStyle(
+                        color:      isDark ? Colors.white : const Color(0xFF111827),
+                        fontSize:   13,
+                        fontWeight: FontWeight.w600)),
+                if (completed != null || duration != null)
+                  Text(
+                    [
+                      if (completed != null) _fmtDate(completed.toString()),
+                      if (duration  != null) '${duration}s',
+                    ].join(' · '),
+                    style: const TextStyle(
+                        color: Color(0xFF9CA3AF), fontSize: 11),
+                  ),
+              ],
+            ),
+          ),
+          if (score != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color:        const Color(0xFF10B981).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text('$score đ',
+                  style: const TextStyle(
+                      color:      Color(0xFF10B981),
+                      fontSize:   11,
+                      fontWeight: FontWeight.w600)),
+            )
+          else if (status == 'COMPLETED')
+            const Icon(Icons.check_circle_rounded,
+                size: 16, color: Color(0xFF10B981)),
+        ],
+      ),
+    );
+  }
+
+  String _fmtDate(String raw) {
+    final dt   = DateTime.tryParse(raw);
+    if (dt == null) return raw;
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays == 0) return 'Hôm nay';
+    if (diff.inDays == 1) return 'Hôm qua';
+    if (diff.inDays < 7)  return '${diff.inDays} ngày trước';
+    return '${dt.day.toString().padLeft(2, '0')}/'
+        '${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+  }
 }

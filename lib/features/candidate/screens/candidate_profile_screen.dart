@@ -176,11 +176,11 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
       builder: (ctx) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return AlertDialog(
-          backgroundColor: isDark ? const Color(0xFF1A2235) : Colors.white,
+          backgroundColor: AppColors.cardBg(isDark),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text('Xác nhận đăng xuất',
               style: AppTextStyles.h4.copyWith(
-                  color: isDark ? Colors.white : AppColors.nearBlack)),
+                  color: AppColors.textPrimary(isDark))),
           content: Text('Bạn có chắc chắn muốn đăng xuất không?',
               style: AppTextStyles.body.copyWith(color: AppColors.gray500)),
           actions: [
@@ -213,7 +213,7 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
     final isDark     = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.offWhite,
+      backgroundColor: Colors.transparent,
       body: CustomScrollView(
         slivers: [
           // ── Header ──────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
                         Expanded(
                           child: Text('Thông tin hồ sơ',
                               style: AppTextStyles.h4.copyWith(
-                                  color: isDark ? AppColors.white : AppColors.nearBlack)),
+                                  color: AppColors.textPrimary(isDark))),
                         ),
                         if (!_isEditing)
                           _EditButton(
@@ -327,7 +327,7 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
                                       .toList(),
                                   onChanged: (v) => setState(() => _expLevel = v),
                                   style: AppTextStyles.body.copyWith(
-                                    color: isDark ? AppColors.white : AppColors.nearBlack,
+                                    color: AppColors.textPrimary(isDark),
                                     fontSize: 14,
                                   ),
                                   dropdownColor: isDark
@@ -399,7 +399,7 @@ class _CandidateProfileScreenState extends ConsumerState<CandidateProfileScreen>
                         const SizedBox(width: 10),
                         Text('Đổi mật khẩu',
                             style: AppTextStyles.h4.copyWith(
-                                color: isDark ? AppColors.white : AppColors.nearBlack)),
+                                color: AppColors.textPrimary(isDark))),
                       ]),
                       const SizedBox(height: 16),
                       if (_pwMsg != null) ...[
@@ -548,7 +548,7 @@ class _CandidateHeader extends StatelessWidget {
             Text(
               user.name.isEmpty ? 'Candidate' : user.name,
               style: AppTextStyles.h2.copyWith(
-                  color: isDark ? AppColors.white : AppColors.nearBlack),
+                  color: AppColors.textPrimary(isDark)),
             ).animate().fadeIn(delay: 100.ms),
             const SizedBox(height: 4),
             Text(
@@ -651,7 +651,7 @@ class _OutlineButton extends StatelessWidget {
         child: Center(
           child: Text(label,
               style: AppTextStyles.buttonText.copyWith(
-                  color: isDark ? AppColors.white : AppColors.nearBlack)),
+                  color: AppColors.textPrimary(isDark))),
         ),
       ),
     );
@@ -683,7 +683,7 @@ class _InfoRow extends StatelessWidget {
               Flexible(
                 child: Text(value,
                     style: AppTextStyles.label.copyWith(
-                      color: isDark ? AppColors.white : AppColors.nearBlack,
+                      color: AppColors.textPrimary(isDark),
                       fontWeight: FontWeight.w600,
                     )),
               ),
@@ -795,7 +795,7 @@ class _SettingsRow extends StatelessWidget {
           Expanded(
             child: Text(label,
                 style: AppTextStyles.label.copyWith(
-                    color: isDark ? AppColors.white : AppColors.nearBlack)),
+                    color: AppColors.textPrimary(isDark))),
           ),
           trailing,
         ]),

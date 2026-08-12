@@ -316,6 +316,30 @@ class _DashboardHeader extends StatelessWidget {
                 ),
               ),
               OutlinedButton.icon(
+                onPressed: () => context.go('/hr/manual-builder'),
+                icon: Icon(Icons.edit_note_rounded,
+                    size: 15,
+                    color: isDark
+                        ? const Color(0xFF9CA3AF)
+                        : const Color(0xFF6B7280)),
+                label: Text('Tạo thủ công',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? const Color(0xFF9CA3AF)
+                            : const Color(0xFF6B7280))),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  side: BorderSide(
+                      color: isDark
+                          ? const Color(0xFF2D3562)
+                          : const Color(0xFFE5E7EB)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              OutlinedButton.icon(
                 onPressed: () => context.go('/hr/history'),
                 icon: Icon(Icons.history_rounded,
                     size: 15,

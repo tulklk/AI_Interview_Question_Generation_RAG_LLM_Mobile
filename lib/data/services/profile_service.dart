@@ -62,6 +62,7 @@ class ProfileService {
     String? targetPosition,
     String? experienceLevel,
     List<String>? techStack,
+    String? avatarUrl,
   }) async {
     try {
       await _dio(token).patch('/api/users/me/candidate-profile', data: {
@@ -72,6 +73,21 @@ class ProfileService {
         if (experienceLevel != null && experienceLevel.isNotEmpty)
           'experienceLevel': experienceLevel,
         if (techStack != null) 'techStack': techStack,
+        if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatarUrl': avatarUrl,
+      });
+    } on DioException catch (e) {
+      throw ProfileException(_mapError(e));
+    }
+  }
+
+  /// Best-effort avatar-only PATCH (used after Google login).
+  static Future<void> syncAvatarUrl({
+    required String token,
+    required String avatarUrl,
+  }) async {
+    try {
+      await _dio(token).patch('/api/users/me/candidate-profile', data: {
+        'avatarUrl': avatarUrl,
       });
     } on DioException catch (e) {
       throw ProfileException(_mapError(e));

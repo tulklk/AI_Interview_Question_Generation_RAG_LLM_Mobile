@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -5,9 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/i18n/app_localizations.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../data/jobseeker_mock.dart';
+import '../../../../core/widgets/skill_icon.dart';
+import '../../../../core/widgets/user_avatar.dart';
+import '../../../../data/providers/app_providers.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
+import '../../providers/candidate_subscription_provider.dart';
+import 'widgets/achievements_grid.dart';
+import 'widgets/gamification_progress_card.dart';
 
 class JobseekerProfileScreen extends ConsumerStatefulWidget {
   const JobseekerProfileScreen({super.key});
@@ -91,10 +98,9 @@ class _JobseekerProfileScreenState
     final l10n = context.l10n;
     final profileState = ref.watch(candidateProfileProvider);
     final isWide = MediaQuery.of(context).size.width > 840;
-    final bg = isDark ? const Color(0xFF070A13) : const Color(0xFFF8FAFC);
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: Colors.transparent,
       body: profileState.isLoading
           ? const Center(child: CircularProgressIndicator())
           : profileState.error != null && profileState.profile == null
@@ -116,9 +122,7 @@ class _JobseekerProfileScreenState
                           Text(
                             l10n.myProfile,
                             style: TextStyle(
-                              color: isDark
-                                  ? Colors.white
-                                  : const Color(0xFF111827),
+                              color: AppColors.textPrimary(isDark),
                               fontSize: 22,
                               fontWeight: FontWeight.w800,
                             ),
@@ -263,9 +267,9 @@ class _JobseekerProfileScreenState
   }
 }
 
-// ── Left Panel (hero card + achievements) ────────────────────────────────────
+// ── Left Panel (hero card + progress + achievements) ─────────────────────────
 
-class _LeftPanel extends StatelessWidget {
+class _LeftPanel extends ConsumerWidget {
   final CandidateProfileData data;
   final bool isDark;
   final AppLocalizations l10n;
@@ -277,13 +281,18 @@ class _LeftPanel extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final cardBg = isDark ? const Color(0xFF1A1F35) : Colors.white;
-    final borderC = isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
-    final earnedCount = achievements.where((a) => a.earned).length;
-    final initial = data.fullName.isNotEmpty
-        ? data.fullName[0].toUpperCase()
-        : 'U';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gamState    = ref.watch(gamificationProvider);
+    final earnedCount = gamState.earnedCount;
+    final level       = gamState.progress?.level;
+    final authUser    = ref.watch(authProvider).user;
+    final isPremium   = ref.watch(candidateSubscriptionProvider).isPremium;
+    final avatarUrl   = (data.avatarUrl != null && data.avatarUrl!.isNotEmpty)
+        ? data.avatarUrl
+        : authUser?.avatarUrl;
+    final displayName = data.fullName.isNotEmpty
+        ? data.fullName
+        : (authUser?.name ?? '');
 
     return Column(
       children: [
@@ -303,82 +312,20 @@ class _LeftPanel extends StatelessWidget {
             ),
             child: Stack(
               children: [
-                // Decorative background blobs
-                Positioned(
-                  top: -30, right: -30,
-                  child: Container(
-                    width: 140, height: 140,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.06),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: -40, left: -20,
-                  child: Container(
-                    width: 120, height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.04),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 60, right: 20,
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.08),
-                    ),
-                  ),
+                const Positioned.fill(
+                  child: RepaintBoundary(child: _HeroDriftOrbs()),
                 ),
                 // Main content
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                   child: Column(
                     children: [
-                      // Glowing avatar
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.white.withValues(alpha: 0.9),
-                              Colors.white.withValues(alpha: 0.3),
-                            ],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.25),
-                              blurRadius: 24,
-                              spreadRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: Container(
-                          width: 80, height: 80,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF9B72FF), Color(0xFF6C47FF)],
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              initial,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 34,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
+                      UserAvatar(
+                        name: displayName.isNotEmpty ? displayName : 'User',
+                        imageUrl: avatarUrl,
+                        size: 80,
+                        showGlowRing: true,
+                        fontScale: 0.42,
                       )
                           .animate(onPlay: (c) => c.repeat(reverse: true))
                           .scaleXY(begin: 1.0, end: 1.03, duration: 2400.ms, curve: Curves.easeInOut),
@@ -407,36 +354,52 @@ class _LeftPanel extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 14),
-                      // Free plan badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(100),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.35)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.workspace_premium_rounded,
-                                size: 12, color: Colors.white),
-                            const SizedBox(width: 4),
-                            Text(
-                              l10n.freePlan,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
-                              ),
+                      // Plan badge — reads live from subscription provider
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: Container(
+                          key: ValueKey(isPremium),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isPremium
+                                ? const Color(0xFFFFD700).withValues(alpha: 0.20)
+                                : Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(100),
+                            border: Border.all(
+                              color: isPremium
+                                  ? const Color(0xFFFFD700).withValues(alpha: 0.60)
+                                  : Colors.white.withValues(alpha: 0.35),
                             ),
-                          ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.workspace_premium_rounded,
+                                size: 12,
+                                color: isPremium
+                                    ? const Color(0xFFFFD700)
+                                    : Colors.white,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isPremium ? 'Premium' : l10n.freePlan,
+                                style: TextStyle(
+                                  color: isPremium
+                                      ? const Color(0xFFFFD700)
+                                      : Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 22),
-                      // Stats row
+                      // Stats row — skill count, earned achievements, XP level
                       Container(
                         padding: const EdgeInsets.symmetric(
                             vertical: 14, horizontal: 8),
@@ -466,9 +429,7 @@ class _LeftPanel extends StatelessWidget {
                               color: Colors.white.withValues(alpha: 0.2),
                             ),
                             _HeroStat(
-                              value: data.seniorityLevel?.isNotEmpty == true
-                                  ? data.seniorityLevel!.split('-').first
-                                  : '—',
+                              value: level != null ? 'Lv.$level' : '—',
                               label: 'Cấp độ',
                             ),
                           ],
@@ -484,93 +445,106 @@ class _LeftPanel extends StatelessWidget {
 
         const SizedBox(height: 14),
 
-        // ── Achievements card ──────────────────────────────────────────────
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: borderC),
-            boxShadow: isDark
-                ? null
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 4, height: 18,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFF9B72FF), Color(0xFF6C47FF)],
-                      ),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      l10n.achievements,
-                      style: TextStyle(
-                        color: isDark ? Colors.white : const Color(0xFF111827),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandPurple.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                    child: Text(
-                      '$earnedCount/${achievements.length} đạt',
-                      style: const TextStyle(
-                        color: AppColors.brandPurple,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              GridView.count(
-                crossAxisCount: 3,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 1.0,
-                children: achievements.asMap().entries.map((e) {
-                  return _AchievementBadge(
-                    achievement: e.value,
-                    isDark: isDark,
-                  )
-                      .animate(delay: (e.key * 60).ms)
-                      .fadeIn(duration: 400.ms)
-                      .scaleXY(begin: 0.7, curve: Curves.easeOutBack);
-                }).toList(),
-              ),
-            ],
-          ),
-        ).animate().fadeIn(delay: 120.ms, duration: 500.ms).slideY(begin: 0.05),
+        // ── Practice progress card (gamification) ────────────────────────
+        const GamificationProgressCard(),
+
+        const SizedBox(height: 14),
+
+        // ── Achievements grid ────────────────────────────────────────────
+        const AchievementsGrid(),
       ],
     );
   }
+}
+
+/// Soft drifting orbs for the profile hero gradient card.
+class _HeroDriftOrbs extends StatefulWidget {
+  const _HeroDriftOrbs();
+
+  @override
+  State<_HeroDriftOrbs> createState() => _HeroDriftOrbsState();
+}
+
+class _HeroDriftOrbsState extends State<_HeroDriftOrbs>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = _ctrl.value;
+        return CustomPaint(
+          painter: _HeroOrbPainter(t),
+          child: const SizedBox.expand(),
+        );
+      },
+    );
+  }
+}
+
+class _HeroOrbPainter extends CustomPainter {
+  final double t;
+  _HeroOrbPainter(this.t);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    void orb({
+      required double cx,
+      required double cy,
+      required double r,
+      required double alpha,
+    }) {
+      final paint = Paint()
+        ..color = Colors.white.withValues(alpha: alpha)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(cx, cy), r, paint);
+    }
+
+    // Slow drift + opacity pulse (keep alpha low so text stays readable)
+    final s1 = (t * 6.28318);
+    final s2 = (t * 6.28318) + 2.1;
+    final s3 = (t * 6.28318) + 4.0;
+
+    orb(
+      cx: size.width * 0.88 + 18 * math.cos(s1),
+      cy: size.height * 0.08 + 14 * math.sin(s1 * 0.7),
+      r: 70 + 8 * math.sin(s1),
+      alpha: 0.055 + 0.025 * (0.5 + 0.5 * math.sin(s1)),
+    );
+    orb(
+      cx: size.width * 0.12 + 22 * math.cos(s2 * 0.8),
+      cy: size.height * 0.92 + 16 * math.sin(s2),
+      r: 60 + 10 * math.cos(s2),
+      alpha: 0.04 + 0.02 * (0.5 + 0.5 * math.cos(s2)),
+    );
+    orb(
+      cx: size.width * 0.78 + 12 * math.sin(s3),
+      cy: size.height * 0.42 + 20 * math.cos(s3 * 0.9),
+      r: 28 + 6 * math.sin(s3 * 1.2),
+      alpha: 0.07 + 0.03 * (0.5 + 0.5 * math.sin(s3)),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeroOrbPainter oldDelegate) =>
+      oldDelegate.t != t;
 }
 
 class _HeroStat extends StatelessWidget {
@@ -602,94 +576,6 @@ class _HeroStat extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _AchievementBadge extends StatelessWidget {
-  final Achievement achievement;
-  final bool isDark;
-  const _AchievementBadge({required this.achievement, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    final earned = achievement.earned;
-    return Tooltip(
-      message: '${achievement.title}\n${achievement.description}',
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: earned
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.brandPurple.withValues(alpha: isDark ? 0.3 : 0.15),
-                    AppColors.brandPurple.withValues(alpha: isDark ? 0.15 : 0.05),
-                  ],
-                )
-              : null,
-          color: earned
-              ? null
-              : (isDark ? const Color(0xFF0D1117) : const Color(0xFFF9FAFB)),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: earned
-                ? AppColors.brandPurple.withValues(alpha: isDark ? 0.5 : 0.35)
-                : (isDark ? const Color(0xFF1E2640) : const Color(0xFFE5E7EB)),
-            width: earned ? 1.5 : 1,
-          ),
-          boxShadow: earned
-              ? [
-                  BoxShadow(
-                    color: AppColors.brandPurple.withValues(alpha: 0.15),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : null,
-        ),
-        child: Stack(
-          children: [
-            Center(
-              child: Opacity(
-                opacity: earned ? 1.0 : 0.35,
-                child: Text(
-                  achievement.icon,
-                  style: const TextStyle(fontSize: 26),
-                ),
-              ),
-            ),
-            if (!earned)
-              Positioned(
-                bottom: 6, right: 6,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF1E2640)
-                        : const Color(0xFFE5E7EB),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.lock_rounded,
-                      size: 9, color: Color(0xFF6B7280)),
-                ),
-              ),
-            if (earned)
-              Positioned(
-                bottom: 6, right: 6,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF10B981),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check_rounded,
-                      size: 8, color: Colors.white),
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -733,9 +619,9 @@ class _ProfileForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cardBg = isDark ? const Color(0xFF1A1F35) : Colors.white;
+    final cardBg = AppColors.cardBg(isDark);
     final borderC =
-        isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+        AppColors.borderColor(isDark);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -749,7 +635,7 @@ class _ProfileForm extends StatelessWidget {
           children: [
             _FieldRow(
               label: 'Full Name',
-              value: data.fullName ?? l10n.notSet,
+              value: data.fullName.isNotEmpty ? data.fullName : l10n.notSet,
               ctrl: nameCtrl,
               editing: editing,
               isDark: isDark,
@@ -886,7 +772,7 @@ class _FormSection extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF111827),
+              color: AppColors.textPrimary(isDark),
               fontSize: 14,
               fontWeight: FontWeight.w700,
             ),
@@ -946,7 +832,7 @@ class _FieldRow extends StatelessWidget {
             TextField(
               controller: ctrl,
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF111827),
+                color: AppColors.textPrimary(isDark),
                 fontSize: 14,
               ),
               decoration: InputDecoration(
@@ -1029,7 +915,7 @@ class _TextAreaRow extends StatelessWidget {
               controller: ctrl,
               maxLines: 4,
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF111827),
+                color: AppColors.textPrimary(isDark),
                 fontSize: 14,
               ),
               decoration: InputDecoration(
@@ -1119,11 +1005,11 @@ class _SeniorityRow extends StatelessWidget {
                 ),
               ),
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF111827),
+                color: AppColors.textPrimary(isDark),
                 fontSize: 14,
               ),
               dropdownColor:
-                  isDark ? const Color(0xFF1A1F35) : Colors.white,
+                  AppColors.cardBg(isDark),
               decoration: InputDecoration(
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1203,23 +1089,11 @@ class _SkillsEditorState extends State<_SkillsEditor> {
           spacing: 8,
           runSpacing: 6,
           children: [
-            ...visible.map((s) => Chip(
-              label: Text(
-                s,
-                style: TextStyle(
-                  color: isDark ? const Color(0xFFA78BFA) : AppColors.brandPurple,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              backgroundColor: AppColors.brandPurple.withValues(alpha: isDark ? 0.15 : 0.08),
-              side: BorderSide(
-                  color: AppColors.brandPurple.withValues(alpha: isDark ? 0.35 : 0.25)),
-              deleteIcon: editing ? const Icon(Icons.close_rounded, size: 14) : null,
-              deleteIconColor: const Color(0xFF9CA3AF),
-              onDeleted: editing ? () => widget.onRemove(s) : null,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-            )),
+            ...visible.map((s) => buildSkillTag(
+                  label: s,
+                  isDark: isDark,
+                  onRemove: editing ? () => widget.onRemove(s) : null,
+                )),
             if (!editing && !_expanded && hiddenCount > 0)
               GestureDetector(
                 onTap: () => setState(() => _expanded = true),
@@ -1232,9 +1106,9 @@ class _SkillsEditorState extends State<_SkillsEditor> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  backgroundColor: isDark ? const Color(0xFF1E2640) : const Color(0xFFF3F4F6),
+                  backgroundColor: AppColors.chipBg(isDark),
                   side: BorderSide(
-                      color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB)),
+                      color: AppColors.borderColor(isDark)),
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                 ),
               ),
@@ -1249,9 +1123,9 @@ class _SkillsEditorState extends State<_SkillsEditor> {
                       fontSize: 12,
                     ),
                   ),
-                  backgroundColor: isDark ? const Color(0xFF1E2640) : const Color(0xFFF3F4F6),
+                  backgroundColor: AppColors.chipBg(isDark),
                   side: BorderSide(
-                      color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB)),
+                      color: AppColors.borderColor(isDark)),
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                 ),
               ),
@@ -1266,7 +1140,7 @@ class _SkillsEditorState extends State<_SkillsEditor> {
                   controller: widget.ctrl,
                   onSubmitted: widget.onAdd,
                   style: TextStyle(
-                    color: isDark ? Colors.white : const Color(0xFF111827),
+                    color: AppColors.textPrimary(isDark),
                     fontSize: 13,
                   ),
                   decoration: InputDecoration(
@@ -1474,9 +1348,9 @@ class _CvSectionState extends ConsumerState<_CvSection> {
     final cvState = ref.watch(cvProvider);
     final l10n = widget.l10n;
     final isDark = widget.isDark;
-    final cardBg = isDark ? const Color(0xFF1A1F35) : Colors.white;
+    final cardBg = AppColors.cardBg(isDark);
     final borderC =
-        isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+        AppColors.borderColor(isDark);
 
     return Container(
       width: double.infinity,
@@ -1497,7 +1371,7 @@ class _CvSectionState extends ConsumerState<_CvSection> {
               Text(
                 l10n.cvResume,
                 style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF111827),
+                  color: AppColors.textPrimary(isDark),
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1602,7 +1476,7 @@ class _CvEmptyState extends StatelessWidget {
         color: isDark ? const Color(0xFF0D1117) : const Color(0xFFF9FAFB),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isDark ? const Color(0xFF1E2640) : const Color(0xFFE5E7EB),
+          color: isDark ? AppColors.darkChip : AppColors.gray200,
           style: BorderStyle.solid,
         ),
       ),
@@ -1619,7 +1493,7 @@ class _CvEmptyState extends StatelessWidget {
           Text(
             l10n.noCvYet,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF111827),
+              color: AppColors.textPrimary(isDark),
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -1706,7 +1580,7 @@ class _CvCardState extends State<_CvCard> {
     final l10n = widget.l10n;
     final labelColor = isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
     final textColor = isDark ? const Color(0xFFD1D5DB) : const Color(0xFF374151);
-    final borderC = isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB);
+    final borderC = AppColors.borderColor(isDark);
 
     final allSkills = [
       ...cv.skills,
@@ -1741,7 +1615,7 @@ class _CvCardState extends State<_CvCard> {
                     Text(
                       cv.cvFileName ?? 'CV',
                       style: TextStyle(
-                        color: isDark ? Colors.white : const Color(0xFF111827),
+                        color: AppColors.textPrimary(isDark),
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1777,16 +1651,18 @@ class _CvCardState extends State<_CvCard> {
             spacing: 6,
             runSpacing: 5,
             children: [
-              ...visibleSkills.map((s) => _SkillChip(label: s, isDark: isDark)),
+              ...visibleSkills.map(
+                (s) => buildSkillTag(label: s, isDark: isDark),
+              ),
               if (!_showAllSkills && hiddenCount > 0)
                 GestureDetector(
                   onTap: () => setState(() => _showAllSkills = true),
-                  child: _SkillChip(label: '+$hiddenCount', isDark: isDark, muted: true),
+                  child: _MutedSkillChip(label: '+$hiddenCount', isDark: isDark),
                 ),
               if (_showAllSkills && allSkills.length > _maxVisibleSkills)
                 GestureDetector(
                   onTap: () => setState(() => _showAllSkills = false),
-                  child: _SkillChip(label: 'Thu gọn', isDark: isDark, muted: true),
+                  child: _MutedSkillChip(label: 'Thu gọn', isDark: isDark),
                 ),
             ],
           ),
@@ -1821,23 +1697,16 @@ class _CvCardState extends State<_CvCard> {
   }
 }
 
-class _SkillChip extends StatelessWidget {
+class _MutedSkillChip extends StatelessWidget {
   final String label;
   final bool isDark;
-  final bool muted;
-  const _SkillChip({required this.label, required this.isDark, this.muted = false});
+  const _MutedSkillChip({required this.label, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = muted
-        ? (isDark ? const Color(0xFF1E2640) : const Color(0xFFF3F4F6))
-        : AppColors.brandPurple.withValues(alpha: isDark ? 0.15 : 0.08);
-    final borderColor = muted
-        ? (isDark ? const Color(0xFF2D3562) : const Color(0xFFE5E7EB))
-        : AppColors.brandPurple.withValues(alpha: isDark ? 0.35 : 0.25);
-    final textColor = muted
-        ? (isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280))
-        : (isDark ? const Color(0xFFA78BFA) : AppColors.brandPurple);
+    final bgColor = AppColors.chipBg(isDark);
+    final borderColor = AppColors.borderColor(isDark);
+    final textColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

@@ -31,7 +31,7 @@ class CandidateHomeScreen extends ConsumerWidget {
         upcomingInterviews.isNotEmpty ? upcomingInterviews.first : null;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : const Color(0xFFF4F5FB),
+      backgroundColor: Colors.transparent,
       body: CustomScrollView(
         slivers: [
           // ── Premium header ────────────────────────────────────────────────

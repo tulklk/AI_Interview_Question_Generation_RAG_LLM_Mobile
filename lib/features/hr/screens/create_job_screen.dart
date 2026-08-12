@@ -9,6 +9,7 @@ import '../../../core/widgets/app_gradient_button.dart';
 import '../../../core/widgets/app_secondary_button.dart';
 import '../../../core/widgets/app_skill_chip.dart';
 import '../../../core/widgets/app_text_field.dart';
+import '../../../core/widgets/grid_background.dart';
 
 class CreateJobScreen extends ConsumerStatefulWidget {
   const CreateJobScreen({super.key});
@@ -66,7 +67,8 @@ class _CreateJobScreenState extends ConsumerState<CreateJobScreen> {
         title: Text('Create Job', style: AppTextStyles.h4.copyWith(
           color: isDark ? AppColors.white : AppColors.nearBlack)),
       ),
-      body: SingleChildScrollView(
+      body: GridBackdrop(
+        child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,6 +203,7 @@ class _CreateJobScreenState extends ConsumerState<CreateJobScreen> {
             const SizedBox(height: 40),
           ],
         ),
+      ),
       ),
     );
   }
