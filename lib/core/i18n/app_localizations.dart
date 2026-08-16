@@ -576,6 +576,36 @@ class AppLocalizations {
   String get createdAt    => isVi ? 'Ngày tạo'         : 'Created at';
   String get by           => isVi ? 'bởi'              : 'by';
   String get min          => isVi ? 'phút'             : 'min';
+  String get genericError => isVi ? 'Có lỗi xảy ra. Vui lòng thử lại.' : 'Something went wrong. Please try again.';
+
+  // ── HR Profile ────────────────────────────────────────────────────────────
+  String get account               => isVi ? 'Tài khoản'          : 'Account';
+  String get manageProfile         => isVi ? 'Quản lý hồ sơ'      : 'Manage Profile';
+  String get personalInformation   => isVi ? 'Thông tin cá nhân'  : 'Personal Information';
+  String get subscriptionPlan      => isVi ? 'Gói dịch vụ'        : 'Subscription';
+  String get currentPlan           => isVi ? 'Gói hiện tại'       : 'Current Plan';
+  String get signOutTitle          => isVi ? 'Xác nhận đăng xuất' : 'Sign Out';
+  String get signOutBody           => isVi ? 'Bạn có chắc chắn muốn đăng xuất không?' : 'Are you sure you want to sign out?';
+  String get signingOut            => isVi ? 'Đang đăng xuất...'  : 'Signing out...';
+  String get profileUpdated        => isVi ? 'Hồ sơ đã được cập nhật thành công.' : 'Profile updated successfully.';
+  String get sessionExpired        => isVi ? 'Phiên đăng nhập hết hạn.' : 'Session expired. Please log in again.';
+  String get passwordChanged       => isVi ? 'Mật khẩu đã được thay đổi thành công.' : 'Password changed successfully.';
+  String get currentPasswordLabel  => isVi ? 'Mật khẩu hiện tại' : 'Current Password';
+  String get newPasswordLabel      => isVi ? 'Mật khẩu mới'      : 'New Password';
+  String get confirmPasswordLabel  => isVi ? 'Xác nhận mật khẩu mới' : 'Confirm New Password';
+
+  // ── HR Shell / Sidebar ────────────────────────────────────────────────────
+  String get manualCreate          => isVi ? 'Tạo thủ công'       : 'Manual Builder';
+  String get recommendedCandidates => isVi ? 'Ứng viên đề xuất'  : 'Recommended Candidates';
+
+  // ── HR Welcome dialog ─────────────────────────────────────────────────────
+  String welcomeGreeting(String name) =>
+      isVi ? 'Chào mừng, $name! 🎉' : 'Welcome, $name! 🎉';
+  String get welcomeBody =>
+      isVi
+          ? 'Bạn đã đăng nhập thành công vào HireGen AI.\nHãy bắt đầu tạo câu hỏi phỏng vấn ngay!'
+          : 'You\'ve signed in to HireGen AI.\nStart generating interview questions now!';
+  String get getStarted  => isVi ? 'Bắt đầu'  : 'Get Started';
 }
 
 // ── Delegate ─────────────────────────────────────────────────────────────────

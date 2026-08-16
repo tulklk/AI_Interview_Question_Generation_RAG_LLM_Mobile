@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/i18n/app_localizations.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_skeleton.dart';
 import '../../../../core/widgets/glass_card.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
@@ -89,13 +90,7 @@ class JobseekerHistoryScreen extends ConsumerWidget {
 
             // Sessions list
             if (isLoading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: CircularProgressIndicator(
-                      color: Color(0xFF6C47FF), strokeWidth: 2.5),
-                ),
-              )
+              PracticeSkeletonList(isDark: isDark)
             else if (loadError != null)
               Center(
                 child: Padding(

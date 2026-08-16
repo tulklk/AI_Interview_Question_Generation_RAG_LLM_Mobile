@@ -99,6 +99,14 @@ class StudioGenState {
   final List<StudioChatMessage> chatMessages;
   final String? chatSessionId;
 
+  // ── JD content + analysis (for Sources tab) ───────────────────────────────
+  /// Raw JD text loaded from API (used to pre-fill the JD text field).
+  final String? jdContent;
+  /// Result from POST .../analyze — detected role / seniority / skills.
+  final JdAnalyzeResult? jdAnalysis;
+  /// True while the Save & Analyze API call is in-flight.
+  final bool isAnalyzingJd;
+
   const StudioGenState({
     this.currentView        = 'form',
     this.pollingPhase       = 'plan',
@@ -123,6 +131,9 @@ class StudioGenState {
     this.documents           = const [],
     this.chatMessages        = const [],
     this.chatSessionId,
+    this.jdContent,
+    this.jdAnalysis,
+    this.isAnalyzingJd      = false,
   });
 
   StudioGenState copyWith({
@@ -133,6 +144,9 @@ class StudioGenState {
     bool                     clearError          = false,
     String?                  error,
     String?                  statusLabel,
+    String?                  jdContent,
+    JdAnalyzeResult?         jdAnalysis,
+    bool?                    isAnalyzingJd,
     String?                  projectId,
     String?                  planId,
     String?                  runId,
@@ -176,6 +190,9 @@ class StudioGenState {
         documents:          documents          ?? this.documents,
         chatMessages:       chatMessages       ?? this.chatMessages,
         chatSessionId:      chatSessionId      ?? this.chatSessionId,
+        jdContent:          jdContent          ?? this.jdContent,
+        jdAnalysis:         jdAnalysis         ?? this.jdAnalysis,
+        isAnalyzingJd:      isAnalyzingJd      ?? this.isAnalyzingJd,
       );
 
   // Convenience
@@ -183,6 +200,7 @@ class StudioGenState {
   bool get hasPlan        => plan      != null;
   bool get hasQuestions   => questions.isNotEmpty;
   bool get isPlanApproved => plan?.isApproved ?? false;
+  bool get hasJd          => jdAnalysis != null || readiness.hasJobDescription;
 
   StudioReadiness get readiness =>
       settings?.readiness ?? const StudioReadiness();
@@ -289,12 +307,14 @@ class StudioGenerationNotifier extends StateNotifier<StudioGenState> {
 
     if (!mounted) return;
 
-    // Also load documents, chat messages, and questions (if plan approved) in background
+    // Also load documents, chat messages, questions, and JD in background
     List<StudioDocument> docs = [];
     List<StudioChatMessage> msgs = [];
     List<StudioQuestion> questions = [];
+    StudioJobDescription? jd;
     try { docs = await _repo.listDocuments(projectId); } catch (_) {}
     try { msgs = await _repo.getChatMessages(projectId); } catch (_) {}
+    try { jd   = await _repo.getJobDescription(projectId); } catch (_) {}
     if (plan != null && (plan.isApproved || plan.status.toLowerCase() == 'generated')) {
       try { questions = await _repo.listQuestions(projectId, planId: plan.id); } catch (_) {}
     }
@@ -311,6 +331,8 @@ class StudioGenerationNotifier extends StateNotifier<StudioGenState> {
       documents:    docs,
       chatMessages: msgs,
       questions:    questions,
+      jdContent:    jd?.content,
+      jdAnalysis:   jd?.summary,
     );
 
     if (activeRun != null) {
@@ -539,17 +561,14 @@ class StudioGenerationNotifier extends StateNotifier<StudioGenState> {
     return 'Đang tạo câu hỏi...';
   }
 
-  // ── Approve plan ───────────────────────────────────────────────────────────
+  // ── Approve plan (does not start question generation) ─────────────────────
 
   Future<void> approvePlan({String? notes}) async {
     final projectId = state.projectId;
     final plan      = state.plan;
     if (projectId == null || plan == null) return;
 
-    state = state.copyWith(
-        isLoading: true, clearError: true,
-        currentView: 'polling', pollingPhase: 'questions');
-    await _persist(view: 'polling', phase: 'questions');
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       await _repo.approvePlan(
@@ -560,8 +579,37 @@ class StudioGenerationNotifier extends StateNotifier<StudioGenState> {
         notes:              notes,
       );
 
+      StudioPlanDetail? updated;
+      try { updated = await _repo.getCurrentPlan(projectId); } catch (_) {}
+      if (!mounted) return;
+      final nextPlan = (updated != null && updated.isApproved)
+          ? updated
+          : (updated ?? plan).copyWith(status: 'Approved');
+      state = state.copyWith(
+        isLoading:   false,
+        plan:        nextPlan,
+        planId:      plan.id,
+        currentView: 'plan_review',
+      );
+      await _persist(view: 'plan_review', planId: plan.id);
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+          isLoading: false,
+          currentView: 'plan_review',
+          error: _friendly(e));
+      await _persist(view: 'plan_review');
+    }
+  }
+
+  /// Generate questions for an already-approved plan.
+  Future<void> startQuestionGeneration() async {
+    final projectId = state.projectId;
+    final planId    = state.planId ?? state.plan?.id;
+    if (projectId == null || planId == null) return;
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
       final settings = state.settings;
-      final planId   = plan.id;
       final runId = await _repo.generateQuestions(
         projectId,
         planId:              planId,
@@ -569,17 +617,15 @@ class StudioGenerationNotifier extends StateNotifier<StudioGenState> {
         includeSampleAnswers: settings?.includeSampleAnswers ?? true,
         includeScoringRubric: settings?.includeScoringRubric ?? true,
       );
-
+      if (!mounted) return;
       state = state.copyWith(
-          isLoading: false, runId: runId, planId: planId);
-      await _persist(runId: runId, planId: planId);
+          isLoading: false, runId: runId, planId: planId,
+          currentView: 'polling', pollingPhase: 'questions');
+      await _persist(view: 'polling', phase: 'questions', runId: runId, planId: planId);
       _startPolling('questions', runId);
     } catch (e) {
-      state = state.copyWith(
-          isLoading: false,
-          currentView: 'plan_review',
-          error: _friendly(e));
-      await _persist(view: 'plan_review');
+      if (!mounted) return;
+      state = state.copyWith(isLoading: false, error: _friendly(e));
     }
   }
 
@@ -603,29 +649,7 @@ class StudioGenerationNotifier extends StateNotifier<StudioGenState> {
 
   // ── Retry questions ────────────────────────────────────────────────────────
 
-  Future<void> retryQuestions() async {
-    final projectId = state.projectId;
-    final planId    = state.planId;
-    if (projectId == null || planId == null) return;
-    state = state.copyWith(isLoading: true, clearError: true);
-    try {
-      final settings = state.settings;
-      final runId = await _repo.generateQuestions(
-        projectId,
-        planId:              planId,
-        replaceExisting:     true,
-        includeSampleAnswers: settings?.includeSampleAnswers ?? true,
-        includeScoringRubric: settings?.includeScoringRubric ?? true,
-      );
-      state = state.copyWith(
-          isLoading: false, runId: runId,
-          currentView: 'polling', pollingPhase: 'questions');
-      await _persist(view: 'polling', phase: 'questions', runId: runId);
-      _startPolling('questions', runId);
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: _friendly(e));
-    }
-  }
+  Future<void> retryQuestions() => startQuestionGeneration();
 
   // ── Resubmit JD ───────────────────────────────────────────────────────────
 
@@ -643,6 +667,100 @@ class StudioGenerationNotifier extends StateNotifier<StudioGenState> {
       _startPolling('plan', null);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _friendly(e));
+    }
+  }
+
+  // ── Step A: Save JD + Analyze (new 3-tab flow) ───────────────────────────
+
+  /// Saves JD to the API and runs analyze. Creates a project if none exists.
+  /// Does NOT generate a plan — that's Step B: [createPlanWithSettings].
+  Future<void> saveAndAnalyzeJd(String jd) async {
+    state = state.copyWith(isAnalyzingJd: true, clearError: true);
+    try {
+      String projectId = state.projectId ?? '';
+      if (projectId.isEmpty) {
+        // Bootstrap: reuse existing project or create a new one
+        try {
+          final list = await _repo.listProjects();
+          if (list.isNotEmpty) projectId = list.first.id;
+        } catch (_) {}
+        if (projectId.isEmpty) {
+          final p = await _repo.createProject(name: 'Interview Plan Studio');
+          projectId = p.id;
+        }
+        await _StudioPrefs.save(projectId: projectId);
+      }
+
+      await _repo.saveJobDescription(projectId, content: jd);
+      final analysis = await _repo.analyzeJobDescription(projectId);
+
+      if (!mounted) return;
+      state = state.copyWith(
+        isAnalyzingJd: false,
+        projectId:     projectId,
+        jdContent:     jd,
+        jdAnalysis:    analysis,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(isAnalyzingJd: false, error: _friendly(e));
+    }
+  }
+
+  // ── Step B: Push settings + generate plan (new 3-tab flow) ───────────────
+
+  /// Pushes settings to the API then triggers plan generation.
+  /// Requires [projectId] to be set (call [saveAndAnalyzeJd] first).
+  Future<void> createPlanWithSettings({
+    required int    numberOfQuestions,
+    required String difficulty,
+    required List<String> questionTypes,
+    required int    interviewLengthMinutes,
+    required String questionTone,
+    required String outputFormat,
+    required String contentMode,
+    required List<String> enabledCodeTemplates,
+    required String outputLanguage,
+    required bool   includeSampleAnswers,
+    required bool   includeScoringRubric,
+  }) async {
+    final projectId = state.projectId;
+    if (projectId == null || projectId.isEmpty) {
+      state = state.copyWith(
+          error: 'Vui lòng nhập và phân tích JD trước khi tạo kế hoạch.');
+      return;
+    }
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final updated = await _repo.updateSettings(projectId, {
+        'numberOfQuestions':    numberOfQuestions,
+        'difficulty':           difficulty,
+        'questionTypes':        questionTypes,
+        'interviewLengthMinutes': interviewLengthMinutes,
+        'questionTone':         questionTone,
+        'outputFormat':         outputFormat,
+        'contentMode':          contentMode,
+        'enabledCodeTemplates': enabledCodeTemplates,
+        'outputLanguage':       outputLanguage,
+        'language':             outputLanguage,
+        'includeSampleAnswers': includeSampleAnswers,
+        'includeScoringRubric': includeScoringRubric,
+      });
+      await _repo.generatePlan(projectId);
+      if (!mounted) return;
+      state = state.copyWith(
+        isLoading:    false,
+        settings:     updated,
+        currentView:  'polling',
+        pollingPhase: 'plan',
+      );
+      await _persist(view: 'polling', phase: 'plan', projectId: projectId);
+      _startPolling('plan', null);
+    } catch (e) {
+      if (!mounted) return;
+      if (!_handleQuota(e)) {
+        state = state.copyWith(isLoading: false, error: _friendly(e));
+      }
     }
   }
 
@@ -851,13 +969,41 @@ class StudioGenerationNotifier extends StateNotifier<StudioGenState> {
     }
   }
 
-  Future<void> applySettings() async {
+  Future<void> applySettings({
+    int? numberOfQuestions,
+    String? difficulty,
+    List<String>? questionTypes,
+    int? interviewLengthMinutes,
+    String? questionTone,
+    String? outputFormat,
+    String? contentMode,
+    List<String>? enabledCodeTemplates,
+    String? outputLanguage,
+    bool? includeSampleAnswers,
+    bool? includeScoringRubric,
+  }) async {
     final projectId = state.projectId;
     final planId    = state.planId ?? state.plan?.id;
     if (projectId == null || planId == null || state.isPlanApproved) return;
 
     state = state.copyWith(isApplyingSettings: true, sideColumnsLocked: true);
     try {
+      if (numberOfQuestions != null) {
+        await _repo.updateSettings(projectId, {
+          'numberOfQuestions':    numberOfQuestions,
+          'difficulty':           difficulty ?? 'Medium',
+          'questionTypes':        questionTypes ?? const <String>[],
+          'interviewLengthMinutes': interviewLengthMinutes ?? 60,
+          'questionTone':         questionTone ?? 'Professional',
+          'outputFormat':         outputFormat ?? 'StructuredInterviewKit',
+          'contentMode':          contentMode ?? 'Mixed',
+          'enabledCodeTemplates': enabledCodeTemplates ?? const <String>[],
+          'outputLanguage':       outputLanguage ?? 'Vietnamese',
+          'language':             outputLanguage ?? 'Vietnamese',
+          'includeSampleAnswers': includeSampleAnswers ?? true,
+          'includeScoringRubric': includeScoringRubric ?? true,
+        });
+      }
       await _repo.applySettingsToPlan(projectId, planId);
       StudioPlanDetail? plan;
       try { plan = await _repo.getCurrentPlan(projectId); } catch (_) {}

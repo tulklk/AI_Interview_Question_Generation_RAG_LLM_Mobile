@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -1377,7 +1376,12 @@ class _GlassNavItem extends StatelessWidget {
   }
 }
 
-// ── Animated practice button (static body, only icon morphs) ─────────────────
+// ── Animated practice button (single icon, modern idle animation) ─────────────
+//
+// Single play_arrow icon with:
+//   • button glow pulses softly (shadow alpha + blur)
+//   • icon breathes (scale 1.0 ↔ 1.10) + gentle pendulum rock (±2.5°)
+// All driven by one ping-pong AnimationController → easeInOut curve.
 
 class _AnimatedPracticeButton extends StatefulWidget {
   final VoidCallback onTap;
@@ -1388,31 +1392,27 @@ class _AnimatedPracticeButton extends StatefulWidget {
       _AnimatedPracticeButtonState();
 }
 
-class _AnimatedPracticeButtonState extends State<_AnimatedPracticeButton> {
-  static const _icons = [
-    Icons.play_arrow_rounded,
-    Icons.flash_on_rounded,
-    Icons.auto_awesome_rounded,
-    Icons.psychology_rounded,
-  ];
-
-  int    _iconIdx = 0;
-  Timer? _timer;
+class _AnimatedPracticeButtonState extends State<_AnimatedPracticeButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _breathCtrl;
+  late final Animation<double>   _breathAnim;
 
   @override
   void initState() {
     super.initState();
-    // Cycle through icons every 1.6 s
-    _timer = Timer.periodic(const Duration(milliseconds: 1600), (_) {
-      if (mounted) {
-        setState(() => _iconIdx = (_iconIdx + 1) % _icons.length);
-      }
-    });
+    _breathCtrl = AnimationController(
+      vsync:    this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat(reverse: true);
+    _breathAnim = CurvedAnimation(
+      parent: _breathCtrl,
+      curve:  Curves.easeInOut,
+    );
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _breathCtrl.dispose();
     super.dispose();
   }
 
@@ -1420,38 +1420,49 @@ class _AnimatedPracticeButtonState extends State<_AnimatedPracticeButton> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: widget.onTap,
-      child: Container(
-        width:  _kCenterBtnSize,
-        height: _kCenterBtnSize,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            begin:  Alignment.topLeft,
-            end:    Alignment.bottomRight,
-            colors: [Color(0xFF9F7AEA), Color(0xFF5B21B6)],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color:        const Color(0xFF6C47FF).withValues(alpha: 0.55),
-              blurRadius:   22,
-              spreadRadius: -2,
-              offset:       const Offset(0, 6),
+      child: AnimatedBuilder(
+        animation: _breathAnim,
+        builder: (_, __) {
+          final t = _breathAnim.value; // 0→1→0 (easeInOut)
+
+          return Container(
+            width:  _kCenterBtnSize,
+            height: _kCenterBtnSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                begin:  Alignment.topLeft,
+                end:    Alignment.bottomRight,
+                colors: [Color(0xFF9F7AEA), Color(0xFF5B21B6)],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color:        const Color(0xFF6C47FF)
+                      .withValues(alpha: 0.36 + 0.24 * t),
+                  blurRadius:   12 + 12 * t,
+                  spreadRadius: -2,
+                  offset:       const Offset(0, 6),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 380),
-          transitionBuilder: (child, anim) => ScaleTransition(
-            scale: CurvedAnimation(parent: anim, curve: Curves.elasticOut),
-            child: FadeTransition(opacity: anim, child: child),
-          ),
-          child: Icon(
-            _icons[_iconIdx],
-            key:   ValueKey(_iconIdx),
-            color: Colors.white,
-            size:  28,
-          ),
-        ),
+            child: Center(
+              child: Transform.rotate(
+                angle: (t - 0.5) * 0.088, // ±0.044 rad ≈ ±2.5°
+                child: Transform.scale(
+                  scale: 1.0 + 0.10 * t,
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size:  28,
+                    shadows: [
+                      Shadow(color: Color(0x88FFFFFF), blurRadius: 14),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

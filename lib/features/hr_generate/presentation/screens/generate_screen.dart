@@ -133,6 +133,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
 
     final currentStep = viewToStep(currentView, pollingPhase);
     final showStep    = currentView != 'draft_view';
+    final isDark      = Theme.of(context).brightness == Brightness.dark;
 
     return PopScope(
       canPop: currentView == 'form',
@@ -177,17 +178,25 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
               )
             : null,
       ),
-      body: RepaintBoundary(
-        child: AnimatedSwitcher(
-        duration:        const Duration(milliseconds: 200),
-        switchInCurve:   Curves.easeOut,
-        switchOutCurve:  Curves.easeIn,
-        transitionBuilder: (child, anim) => FadeTransition(
-          opacity: anim,
-          child:   child,
-        ),
-        child: _buildView(currentView),
-        ),
+      body: Column(
+        children: [
+          if (currentView == 'form')
+            _ModeToggleBar(isAiMode: true, isDark: isDark),
+          Expanded(
+            child: RepaintBoundary(
+              child: AnimatedSwitcher(
+              duration:        const Duration(milliseconds: 200),
+              switchInCurve:   Curves.easeOut,
+              switchOutCurve:  Curves.easeIn,
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child:   child,
+              ),
+              child: _buildView(currentView),
+              ),
+            ),
+          ),
+        ],
       ),
     ),
     );
@@ -209,5 +218,111 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
       default:
         return const Step1JdInputView(key: ValueKey('form'));
     }
+  }
+}
+
+// ── Mode Toggle Bar ───────────────────────────────────────────────────────────
+
+class _ModeToggleBar extends StatelessWidget {
+  final bool isAiMode;
+  final bool isDark;
+  const _ModeToggleBar({required this.isAiMode, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Container(
+      color: isDark ? const Color(0xFF0B1020) : Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(
+          color:  isDark ? const Color(0xFF111827) : const Color(0xFFF0F1F5),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE2E4EA),
+          ),
+        ),
+        child: Row(children: [
+          _ModeTab(
+            icon:     Icons.auto_awesome_rounded,
+            label:    l10n.generateQuestions,
+            active:   isAiMode,
+            isDark:   isDark,
+            onTap:    isAiMode ? null : () => context.go('/hr/generate'),
+          ),
+          _ModeTab(
+            icon:     Icons.edit_note_rounded,
+            label:    l10n.manualCreate,
+            active:   !isAiMode,
+            isDark:   isDark,
+            onTap:    isAiMode ? () => context.go('/hr/manual-builder') : null,
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ModeTab extends StatelessWidget {
+  final IconData icon;
+  final String   label;
+  final bool     active;
+  final bool     isDark;
+  final VoidCallback? onTap;
+  const _ModeTab({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.isDark,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor   = GenColors.primary;
+    final inactiveColor = isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.all(3),
+          decoration: active
+              ? BoxDecoration(
+                  color: isDark ? const Color(0xFF1E2640) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark
+                        ? GenColors.primary.withValues(alpha: 0.35)
+                        : const Color(0xFFE5E7EB),
+                  ),
+                  boxShadow: isDark ? null : [
+                    BoxShadow(
+                      color:      Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4, offset: const Offset(0, 1)),
+                  ],
+                )
+              : null,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14,
+                  color: active ? activeColor : inactiveColor),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color:      active ? activeColor : inactiveColor,
+                  fontSize:   12,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

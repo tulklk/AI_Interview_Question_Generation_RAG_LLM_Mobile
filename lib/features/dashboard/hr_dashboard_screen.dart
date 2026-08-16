@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../core/widgets/app_skeleton.dart';
 import '../../data/providers/app_providers.dart';
 import '../../features/hr_generate/domain/models/generation_session.dart';
 import '../../features/hr_generate/domain/enums/generation_status.dart';
@@ -556,34 +557,13 @@ class _KpiGrid extends StatelessWidget {
       );
 }
 
+// _KpiShimmer delegates to the shared animated KpiSkeletonGrid.
 class _KpiShimmer extends StatelessWidget {
   final bool isDark;
   const _KpiShimmer({required this.isDark});
 
-  Widget _box() => Container(
-        height: 110,
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1F35) : const Color(0xFFE5E7EB),
-          borderRadius: BorderRadius.circular(14),
-        ),
-      );
-
   @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          Row(children: [
-            Expanded(child: _box()),
-            const SizedBox(width: 12),
-            Expanded(child: _box()),
-          ]),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: _box()),
-            const SizedBox(width: 12),
-            Expanded(child: _box()),
-          ]),
-        ],
-      );
+  Widget build(BuildContext context) => KpiSkeletonGrid(isDark: isDark);
 }
 
 class _KpiError extends StatelessWidget {

@@ -10,6 +10,7 @@ import '../../hr_generate/domain/enums/difficulty_level.dart';
 import '../../hr_generate/domain/enums/question_type.dart';
 import '../../hr_generate/domain/models/generated_question.dart';
 import '../../hr_generate/domain/models/studio_models.dart';
+import '../../../core/widgets/app_skeleton.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
 
@@ -747,8 +748,7 @@ class HistoryDetailScreen extends ConsumerWidget {
       ),
       body: GridBackdrop(
         child: dState.isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF6C47FF)))
+          ? SessionDetailSkeleton(isDark: isDark)
           : CustomScrollView(
               slivers: [
                 SliverPadding(

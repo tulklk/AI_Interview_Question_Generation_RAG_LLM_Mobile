@@ -16,6 +16,7 @@ import '../../../hr_generate/data/generation_api.dart';
 import '../../../subscription/payment/upgrade_payment_sheet.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/candidate_subscription_provider.dart';
+import '../../../../core/widgets/app_skeleton.dart';
 
 // ── Brand colours ─────────────────────────────────────────────────────────────
 
@@ -401,7 +402,7 @@ class _FeedbackResultScreenState extends ConsumerState<FeedbackResultScreen>
     final c      = _C.of(isDark);
     final l10n   = context.l10n;
 
-    if (_loading) return _buildLoading(c, l10n);
+    if (_loading) return FeedbackResultSkeleton(isDark: isDark);
     if (_error)   return _buildError(c, l10n);
     if (_session == null) return _buildNotFound(c, l10n);
 
@@ -801,17 +802,6 @@ class _FeedbackResultScreenState extends ConsumerState<FeedbackResultScreen>
   }
 
   // ── States ────────────────────────────────────────────────────────────────────
-
-  Widget _buildLoading(_C c, AppLocalizations l10n) => Scaffold(
-    backgroundColor: c.bg,
-    body: Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const CircularProgressIndicator(color: _kPrimary),
-        const SizedBox(height: 16),
-        Text(l10n.loading, style: TextStyle(color: c.secondaryText)),
-      ]),
-    ),
-  );
 
   Widget _buildError(_C c, AppLocalizations l10n) => Scaffold(
     backgroundColor: c.bg,

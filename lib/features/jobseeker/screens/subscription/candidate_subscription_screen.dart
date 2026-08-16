@@ -11,6 +11,7 @@ import '../../../subscription/subscription_provider.dart'
     show MySubscription;
 import '../../../subscription/payment/upgrade_payment_sheet.dart';
 import '../../providers/candidate_subscription_provider.dart';
+import '../../../../core/widgets/app_skeleton.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -186,8 +187,7 @@ class CandidateSubscriptionScreen extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final body = state.isLoading && state.subscription == null
-        ? const Center(
-            child: CircularProgressIndicator(color: AppColors.brandPurple))
+        ? SubscriptionSkeleton(isDark: isDark)
         : RefreshIndicator(
             color:    AppColors.brandPurple,
             onRefresh: () async {

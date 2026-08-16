@@ -7,6 +7,7 @@ import 'payment/upgrade_payment_sheet.dart';
 import '../hr_generate/data/generation_api.dart';
 import '../hr_generate/presentation/gen_colors.dart';
 import '../../core/providers/ui_providers.dart';
+import '../../core/widgets/app_skeleton.dart';
 import '../../core/widgets/grid_background.dart';
 import '../../data/providers/app_providers.dart';
 
@@ -118,7 +119,7 @@ class SubscriptionScreen extends ConsumerWidget {
         child: RefreshIndicator(
         onRefresh: () => ref.read(subscriptionProvider.notifier).refresh(),
         child: state.isLoading && state.subscription == null
-            ? const Center(child: CircularProgressIndicator())
+            ? SubscriptionSkeleton(isDark: isDark)
             : _SubscriptionBody(
                 state: state,
                 isDark: isDark,
@@ -189,12 +190,7 @@ class _SubscriptionBody extends ConsumerWidget {
               )).toList(),
             );
           },
-          loading: () => const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: CircularProgressIndicator(),
-            ),
-          ),
+          loading: () => PlanLoadingSkeleton(isDark: isDark),
           error: (_, __) => _FallbackPlanCards(
             sub: sub,
             isDark: isDark,
