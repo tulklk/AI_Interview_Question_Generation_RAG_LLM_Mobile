@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/app_skeleton.dart';
 import '../../domain/models/candidate_recommendation.dart';
 import '../providers/recommendation_provider.dart';
 import '../widgets/recommendation_shared_widgets.dart';
@@ -72,10 +73,7 @@ class _RecommendationListScreenState
   Widget _buildBody(
       RecommendationListState state, bool isDark, RecommendationFilter filter) {
     if (state.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-            color: Color(0xFF6C47FF), strokeWidth: 2),
-      );
+      return RecommendationSkeletonList(isDark: isDark);
     }
     if (state.error != null && state.items.isEmpty) {
       return _ErrorView(

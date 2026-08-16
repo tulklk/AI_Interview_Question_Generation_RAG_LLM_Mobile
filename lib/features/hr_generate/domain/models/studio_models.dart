@@ -351,6 +351,22 @@ class StudioPlanDetail {
       concurrencyVersion: (_v(j, 'concurrencyVersion', 'ConcurrencyVersion') ?? '').toString(),
     );
   }
+
+  StudioPlanDetail copyWith({String? status}) => StudioPlanDetail(
+        id:                     id,
+        projectId:              projectId,
+        revision:               revision,
+        title:                  title,
+        status:                 status ?? this.status,
+        totalQuestions:         totalQuestions,
+        interviewLengthMinutes: interviewLengthMinutes,
+        difficulty:             difficulty,
+        difficultyMix:          difficultyMix,
+        focusAreas:             focusAreas,
+        sourcesUsed:            sourcesUsed,
+        sections:               sections,
+        concurrencyVersion:     concurrencyVersion,
+      );
 }
 
 // ── 10.5 Settings ─────────────────────────────────────────────────────────────

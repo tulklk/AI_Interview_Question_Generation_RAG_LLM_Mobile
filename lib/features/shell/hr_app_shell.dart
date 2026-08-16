@@ -1,5 +1,4 @@
-import 'dart:math' show cos, pi, sin;
-import 'dart:ui'   show ImageFilter;
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -113,7 +112,7 @@ class _AppBar extends ConsumerWidget implements PreferredSizeWidget {
     if (location.startsWith('/hr/knowledge')) return l10n.knowledgeBase;
     if (location.startsWith('/hr/settings')) return l10n.settings;
     if (location.startsWith('/hr/profile')) return l10n.profile;
-    if (location.startsWith('/hr/recommendations')) return 'Ứng viên đề xuất';
+    if (location.startsWith('/hr/recommendations')) return l10n.recommendedCandidates;
     return l10n.appName;
   }
 
@@ -168,7 +167,7 @@ class _AppBar extends ConsumerWidget implements PreferredSizeWidget {
       actions: [
         // Notifications
         Semantics(
-          label: 'Thông báo',
+          label: l10n.notificationsSection,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -206,7 +205,7 @@ class _AppBar extends ConsumerWidget implements PreferredSizeWidget {
         Padding(
           padding: const EdgeInsets.only(right: 12),
           child: Tooltip(
-            message: 'Hồ sơ',
+            message: l10n.profile,
             child: GestureDetector(
               onTap: () => context.go('/hr/profile'),
               child: _UserAvatar(
@@ -245,18 +244,13 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
             route: '/hr/generate',
             icon: Icons.auto_awesome_rounded,
             badge: 'AI'),
-        const _NavItem(
-            label: 'Tạo thủ công',
-            route: '/hr/manual-builder',
-            icon: Icons.edit_note_rounded,
-            badge: null),
         _NavItem(
             label: l10n.history,
             route: '/hr/history',
             icon: Icons.history_rounded,
             badge: '7'),
-        const _NavItem(
-            label: 'Ứng viên đề xuất',
+        _NavItem(
+            label: l10n.recommendedCandidates,
             route: '/hr/recommendations',
             icon: Icons.people_alt_rounded,
             badge: null),
@@ -264,16 +258,6 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
             label: l10n.knowledgeBase,
             route: '/hr/knowledge',
             icon: Icons.menu_book_rounded,
-            badge: null),
-        const _NavItem(
-            label: 'Gói dịch vụ',
-            route: '/hr/subscription',
-            icon: Icons.workspace_premium_rounded,
-            badge: null),
-        _NavItem(
-            label: l10n.settings,
-            route: '/hr/settings',
-            icon: Icons.settings_rounded,
             badge: null),
       ];
 
@@ -474,8 +458,8 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
                             ? Icons.light_mode_rounded
                             : Icons.dark_mode_rounded,
                         label: ref.watch(themeProvider) == ThemeMode.dark
-                            ? 'Sáng'
-                            : 'Tối',
+                            ? l10n.lightTheme
+                            : l10n.darkTheme,
                         isDark: isDark,
                         onTap: () =>
                             ref.read(themeProvider.notifier).toggle(),
@@ -486,8 +470,8 @@ class _HRDrawerState extends ConsumerState<_HRDrawer> {
                       child: _DrawerToggleBtn(
                         icon: Icons.language_rounded,
                         label: ref.watch(languageProvider) == 'vi'
-                            ? 'English'
-                            : 'Tiếng Việt',
+                            ? l10n.english
+                            : l10n.vietnamese,
                         isDark: isDark,
                         onTap: () =>
                             ref.read(languageProvider.notifier).toggle(),
@@ -688,7 +672,17 @@ class _DrawerToggleBtn extends StatelessWidget {
       );
 }
 
-// ── HR Glass Nav Bar ──────────────────────────────────────────────────────────
+// ── Notched nav-bar layout constants ─────────────────────────────────────────
+
+const double _kHRPillH   = 60.0;
+const double _kHRMarginH = 18.0;
+const double _kHRMargBot = 12.0;
+const double _kHRTopPad  = 4.0;
+const double _kHRFabSz   = 56.0;
+const double _kHRFabAb   = 22.0;          // how far the FAB rises above the pill top
+const double _kHRNotchR  = _kHRFabSz / 2 + 10; // arc radius = 38
+
+// ── HR Glass Nav Bar (notched pill + centre FAB) ──────────────────────────────
 
 class _HRGlassNavBar extends StatelessWidget {
   final String                  currentLocation;
@@ -709,14 +703,20 @@ class _HRGlassNavBar extends StatelessWidget {
     return currentLocation.startsWith(route);
   }
 
+  // 0=Dashboard 1=History 2=Knowledge 3=Profile
+  int get _activeIndex {
+    if (currentLocation == '/hr' ||
+        currentLocation.startsWith('/hr/dashboard')) return 0;
+    if (currentLocation.startsWith('/hr/history'))   return 1;
+    if (currentLocation.startsWith('/hr/knowledge')) return 2;
+    if (currentLocation.startsWith('/hr/profile'))   return 3;
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final l10n     = context.l10n;
-    final safePad  = MediaQuery.of(context).padding.bottom;
-    const pillH    = 60.0;
-    const marginH  = 18.0;
-    const marginBot = 12.0;
-    const topPad   = 4.0;
+    final l10n    = context.l10n;
+    final safePad = MediaQuery.of(context).padding.bottom;
 
     final pillBg = isDark
         ? const Color(0xFF1A1D2E).withValues(alpha: 0.74)
@@ -725,63 +725,157 @@ class _HRGlassNavBar extends StatelessWidget {
         ? Colors.white.withValues(alpha: 0.10)
         : Colors.black.withValues(alpha: 0.07);
 
+    final totalH = _kHRFabAb + _kHRTopPad + _kHRPillH + _kHRMargBot + safePad;
+    final pillTop = _kHRFabAb + _kHRTopPad;
+
     return SizedBox(
-      height: topPad + pillH + marginBot + safePad,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          marginH, topPad, marginH, marginBot + safePad,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(32),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-            child: Container(
-              decoration: BoxDecoration(
-                color:        pillBg,
-                borderRadius: BorderRadius.circular(32),
-                border: Border.all(color: pillBorder, width: 1),
-              ),
-              child: Row(
-                children: [
-                  _HRGlassNavItem(
-                    icon:   Icons.home_rounded,
-                    label:  l10n.dashboard,
-                    active: _active('/hr/dashboard'),
-                    isDark: isDark,
-                    onTap:  () => navigationShell.goBranch(0),
+      height: totalH,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // ── Notched glass pill ─────────────────────────────────────────────
+          Positioned(
+            left:   _kHRMarginH,
+            right:  _kHRMarginH,
+            top:    pillTop,
+            bottom: _kHRMargBot + safePad,
+            child: Stack(
+              children: [
+                // Blur background clipped to notched shape
+                Positioned.fill(
+                  child: ClipPath(
+                    clipper: const _HRNotchedClipper(),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                      child: Container(color: pillBg),
+                    ),
                   ),
-                  _HRGlassNavItem(
-                    icon:   Icons.history_rounded,
-                    label:  l10n.history,
-                    active: _active('/hr/history'),
-                    isDark: isDark,
-                    onTap:  () => navigationShell.goBranch(1),
+                ),
+                // Border outline traced along the same notch
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _HRNotchedBorderPainter(borderColor: pillBorder),
                   ),
-                  _HRGlassNavItem(
-                    icon:   Icons.menu_book_rounded,
-                    label:  l10n.knowledgeBase,
-                    active: _active('/hr/knowledge'),
-                    isDark: isDark,
-                    onTap:  () => navigationShell.goBranch(2),
+                ),
+                // Sliding active-indicator pill (purple rect that glides)
+                Positioned.fill(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(
+                      begin: _activeIndex.toDouble(),
+                      end:   _activeIndex.toDouble(),
+                    ),
+                    duration: const Duration(milliseconds: 420),
+                    curve:    Curves.easeInOutCubic,
+                    builder: (ctx, t, _) {
+                      return LayoutBuilder(builder: (ctx, c) {
+                        final W    = c.maxWidth;
+                        const gap  = _kHRNotchR * 2.0;
+                        final pilW = (W - gap) / 2.0;
+
+                        final double cx;
+                        if (t <= 1.0) {
+                          cx = pilW * 0.25 + t * pilW * 0.5;
+                        } else if (t >= 2.0) {
+                          cx = pilW + gap + pilW * 0.25 + (t - 2.0) * pilW * 0.5;
+                        } else {
+                          final from = pilW * 0.75;
+                          final to   = pilW + gap + pilW * 0.25;
+                          cx = from + (to - from) * (t - 1.0);
+                        }
+
+                        const indW   = 50.0;
+                        const indH   = 38.0;
+                        final indTop = (_kHRPillH - indH) / 2;
+
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              left:   cx - indW / 2,
+                              top:    indTop,
+                              width:  indW,
+                              height: indH,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6C47FF),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:      const Color(0xFF6C47FF)
+                                          .withValues(alpha: 0.45),
+                                      blurRadius: 12,
+                                      offset:     const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      });
+                    },
                   ),
-                  _HRGlassNavItem(
-                    icon:   Icons.account_circle_rounded,
-                    label:  l10n.profile,
-                    active: _active('/hr/profile'),
-                    isDark: isDark,
-                    onTap:  () => navigationShell.goBranch(3),
-                  ),
-                ],
-              ),
+                ),
+                // Nav icons – 2 left, 2 right, dead-zone under notch
+                Positioned.fill(
+                  child: Row(children: [
+                    Expanded(
+                      child: Row(children: [
+                        _HRGlassNavItem(
+                          icon:   Icons.home_rounded,
+                          label:  l10n.dashboard,
+                          active: _active('/hr/dashboard'),
+                          isDark: isDark,
+                          onTap:  () => navigationShell.goBranch(0),
+                        ),
+                        _HRGlassNavItem(
+                          icon:   Icons.history_rounded,
+                          label:  l10n.history,
+                          active: _active('/hr/history'),
+                          isDark: isDark,
+                          onTap:  () => navigationShell.goBranch(1),
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(width: _kHRNotchR * 2), // dead-zone
+                    Expanded(
+                      child: Row(children: [
+                        _HRGlassNavItem(
+                          icon:   Icons.menu_book_rounded,
+                          label:  l10n.knowledgeBase,
+                          active: _active('/hr/knowledge'),
+                          isDark: isDark,
+                          onTap:  () => navigationShell.goBranch(2),
+                        ),
+                        _HRGlassNavItem(
+                          icon:   Icons.account_circle_rounded,
+                          label:  l10n.profile,
+                          active: _active('/hr/profile'),
+                          isDark: isDark,
+                          onTap:  () => navigationShell.goBranch(3),
+                        ),
+                      ]),
+                    ),
+                  ]),
+                ),
+              ],
             ),
           ),
-        ),
+
+          // ── Morphing Generate-Question-Set FAB ────────────────────────────
+          Positioned(
+            top:   0,
+            left:  0,
+            right: 0,
+            child: Center(child: _HRMorphFab()),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── HR glass nav item (icon-only, pill active indicator) ──────────────────────
+// ── HR glass nav item (icon-only; active pill is a separate sliding layer) ────
 
 class _HRGlassNavItem extends StatelessWidget {
   final IconData     icon;
@@ -800,7 +894,6 @@ class _HRGlassNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accent    = Color(0xFF6C47FF);
     final iconColor = active
         ? Colors.white
         : (isDark ? const Color(0xFF8A94A6) : const Color(0xFF9AA3B2));
@@ -809,38 +902,16 @@ class _HRGlassNavItem extends StatelessWidget {
       child: Tooltip(
         message: label,
         child: GestureDetector(
-          onTap: onTap,
+          onTap:    onTap,
           behavior: HitTestBehavior.opaque,
           child: Center(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 240),
-              curve: Curves.easeOutBack,
-              width:  active ? 50 : 36,
-              height: active ? 38 : 30,
-              decoration: BoxDecoration(
-                color:        active ? accent : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: active
-                    ? [
-                        BoxShadow(
-                          color:      accent.withValues(alpha: 0.38),
-                          blurRadius: 10,
-                          offset:     const Offset(0, 3),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Center(
-                child: AnimatedScale(
-                  duration: const Duration(milliseconds: 200),
-                  scale: active ? 1.0 : 0.90,
-                  child: Icon(
-                    icon,
-                    size:  active ? 22 : 20,
-                    color: iconColor,
-                  ),
-                ),
-              ),
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 220),
+              curve:    Curves.easeOutBack,
+              scale:    active ? 1.0 : 0.88,
+              child: Icon(icon,
+                  size:  active ? 22 : 20,
+                  color: iconColor),
             ),
           ),
         ),
@@ -849,226 +920,158 @@ class _HRGlassNavItem extends StatelessWidget {
   }
 }
 
-// ── HR Centre FAB ────────────────────────────────────────────────────────────
+// ── HR generate-question-set FAB ──────────────────────────────────────────────
+//
+// Single icon (auto_awesome) with a modern idle animation:
+//   • button glow pulses softly (shadow alpha + blur)
+//   • icon breathes (scale 1.0 ↔ 1.10) with a gentle pendulum rock (±2.5°)
+// All driven by one ping-pong AnimationController → easeInOut curve.
 
-class _HRCenterFab extends StatefulWidget {
-  final String currentLocation;
-  const _HRCenterFab({required this.currentLocation});
+class _HRMorphFab extends StatefulWidget {
+  const _HRMorphFab();
 
   @override
-  State<_HRCenterFab> createState() => _HRCenterFabState();
+  State<_HRMorphFab> createState() => _HRMorphFabState();
 }
 
-class _HRCenterFabState extends State<_HRCenterFab>
-    with TickerProviderStateMixin {
-  late final AnimationController _pulseCtrl;
-  late final AnimationController _glowCtrl;
-  late final AnimationController _iconCtrl;
+class _HRMorphFabState extends State<_HRMorphFab>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _breathCtrl;
+  late final Animation<double>   _breathAnim; // easeInOut 0→1
 
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat();
-    _glowCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
+    _breathCtrl = AnimationController(
+      vsync:    this,
+      duration: const Duration(milliseconds: 2200),
     )..repeat(reverse: true);
-    // Icon: appear → breathe → float-away → pause → repeat  (2.4 s)
-    _iconCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat();
+    _breathAnim = CurvedAnimation(
+      parent: _breathCtrl,
+      curve:  Curves.easeInOut,
+    );
   }
 
   @override
   void dispose() {
-    _pulseCtrl.dispose();
-    _glowCtrl.dispose();
-    _iconCtrl.dispose();
+    _breathCtrl.dispose();
     super.dispose();
-  }
-
-  Widget _pulseRing(double phase) {
-    return AnimatedBuilder(
-      animation: _pulseCtrl,
-      builder: (_, __) {
-        final t = (_pulseCtrl.value + phase) % 1.0;
-        final r = 28.0 + t * 22.0;
-        final alpha = (1.0 - t) * 0.55;
-        return SizedBox(
-          width: r * 2,
-          height: r * 2,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFF6C47FF).withValues(alpha: alpha),
-                width: 1.5,
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => context.go('/hr/generate'),
-      child: SizedBox(
-        width: 56,
-        height: 56,
-        child: Stack(
-          alignment: Alignment.center,
-          clipBehavior: Clip.none,
-          children: [
-            _pulseRing(0.0),
-            _pulseRing(0.5),
+      child: AnimatedBuilder(
+        animation: _breathAnim,
+        builder: (_, __) {
+          final t = _breathAnim.value; // 0→1→0 (easeInOut)
 
-            // Background circle + sparkle burst (all via CustomPaint)
-            AnimatedBuilder(
-              animation: Listenable.merge([_glowCtrl, _iconCtrl]),
-              builder: (_, __) => CustomPaint(
-                size: const Size(56, 56),
-                painter: _FabPainter(
-                  glow: _glowCtrl.value,
-                  iconAnim: _iconCtrl.value,
+          // ── Button body (glow breathes) ──────────────────────────────────
+          return Container(
+            width:  _kHRFabSz,
+            height: _kHRFabSz,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                begin:  Alignment.topLeft,
+                end:    Alignment.bottomRight,
+                colors: [Color(0xFF9B72FF), Color(0xFF6C47FF)],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color:        const Color(0xFF6C47FF)
+                      .withValues(alpha: 0.36 + 0.24 * t),
+                  blurRadius:   12 + 12 * t,
+                  spreadRadius: -1,
+                  offset:       const Offset(0, 5),
+                ),
+              ],
+            ),
+            // ── Icon (scale breathe + pendulum rock) ──────────────────────
+            child: Center(
+              child: Transform.rotate(
+                // oscillates from -0.044 rad (≈−2.5°) to +0.044 rad (+2.5°)
+                angle: (t - 0.5) * 0.088,
+                child: Transform.scale(
+                  scale: 1.0 + 0.10 * t,
+                  child: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: Colors.white,
+                    size:  26,
+                    shadows: [
+                      Shadow(color: Color(0x88FFFFFF), blurRadius: 14),
+                    ],
+                  ),
                 ),
               ),
             ),
-
-            // Animated icon: appear → breathe → float away
-            AnimatedBuilder(
-              animation: _iconCtrl,
-              builder: (_, __) {
-                final t = _iconCtrl.value;
-                final double scale;
-                final double opacity;
-
-                if (t < 0.18) {
-                  // Bounce in
-                  final p = t / 0.18;
-                  scale   = Curves.easeOutBack.transform(p).clamp(0.0, 1.5);
-                  opacity = (p * 1.6).clamp(0.0, 1.0);
-                } else if (t < 0.58) {
-                  // Hold with subtle breathing bob
-                  final bp = (t - 0.18) / 0.40;
-                  scale   = 1.0 + 0.03 * sin(bp * 2 * pi);
-                  opacity = 1.0;
-                } else if (t < 0.76) {
-                  // Float upward & fade out
-                  final p = (t - 0.58) / 0.18;
-                  scale   = 1.0 + p * 0.42;
-                  opacity = 1.0 - p;
-                } else {
-                  // Blank pause
-                  scale   = 0.0;
-                  opacity = 0.0;
-                }
-
-                return Transform.scale(
-                  scale: scale.clamp(0.0, 1.5),
-                  child: Opacity(
-                    opacity: opacity.clamp(0.0, 1.0),
-                    child: const Icon(
-                      Icons.auto_awesome_rounded,
-                      color: Colors.white,
-                      size: 26,
-                      shadows: [Shadow(color: Color(0x88FFFFFF), blurRadius: 8)],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 }
 
-class _FabPainter extends CustomPainter {
-  final double glow;
-  final double iconAnim;
-  const _FabPainter({
-    required this.glow,
-    required this.iconAnim,
-  });
+// ── HR notched-pill clipper ───────────────────────────────────────────────────
+
+class _HRNotchedClipper extends CustomClipper<Path> {
+  const _HRNotchedClipper();
+  static const _cr = 32.0;
+  static const _nr = _kHRNotchR;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-    final rect   = Rect.fromCircle(center: center, radius: radius);
-
-    // Breathing glow — extra burst when icon appears
-    final appearBoost = iconAnim < 0.22 ? (1.0 - iconAnim / 0.22) * 0.30 : 0.0;
-    canvas.drawCircle(
-      center,
-      radius + 2,
-      Paint()
-        ..color = const Color(0xFF6C47FF)
-            .withValues(alpha: (0.35 + 0.25 * glow + appearBoost).clamp(0.0, 1.0))
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 + glow * 6),
-    );
-
-    // Static radial gradient fill (no color rotation)
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..shader = const RadialGradient(
-          center: Alignment.topLeft,
-          radius: 1.2,
-          colors: [Color(0xFF8B65FF), Color(0xFF6C47FF)],
-        ).createShader(rect),
-    );
-
-    // Inner top-left highlight
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.35, -0.45),
-          radius: 0.9,
-          colors: [
-            Colors.white.withValues(alpha: 0.22),
-            Colors.transparent,
-          ],
-        ).createShader(rect),
-    );
-
-    // Sparkle burst when icon appears (active 0.02 – 0.44)
-    if (iconAnim > 0.02 && iconAnim < 0.44) {
-      final st = ((iconAnim - 0.02) / 0.42).clamp(0.0, 1.0);
-      // Fade in quickly, then fade out
-      final alpha = (st < 0.25 ? st / 0.25 : 1.0 - (st - 0.25) / 0.75)
-          .clamp(0.0, 1.0);
-      final dotPaint = Paint()..style = PaintingStyle.fill;
-
-      for (int i = 0; i < 8; i++) {
-        final angle = i * pi / 4.0;
-        final dist  = 10.0 + st * 18.0;
-        final dotR  = (i.isEven ? 2.6 : 1.6) * (1.0 - st * 0.35);
-
-        dotPaint.color = Colors.white.withValues(alpha: alpha * 0.88);
-        canvas.drawCircle(
-          Offset(center.dx + dist * cos(angle), center.dy + dist * sin(angle)),
-          dotR.clamp(0.3, 3.0),
-          dotPaint,
-        );
-      }
-    }
+  Path getClip(Size size) {
+    final outer = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        const Radius.circular(_cr),
+      ));
+    final notch = Path()
+      ..addOval(Rect.fromCircle(
+        center: Offset(size.width / 2, 0),
+        radius: _nr,
+      ));
+    return Path.combine(PathOperation.difference, outer, notch);
   }
 
   @override
-  bool shouldRepaint(_FabPainter old) =>
-      old.glow != glow || old.iconAnim != iconAnim;
+  bool shouldReclip(_HRNotchedClipper _) => false;
+}
+
+// ── HR notched-pill border painter ───────────────────────────────────────────
+
+class _HRNotchedBorderPainter extends CustomPainter {
+  const _HRNotchedBorderPainter({required this.borderColor});
+  final Color borderColor;
+  static const _cr = 32.0;
+  static const _nr = _kHRNotchR;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outer = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        const Radius.circular(_cr),
+      ));
+    final notch = Path()
+      ..addOval(Rect.fromCircle(
+        center: Offset(size.width / 2, 0),
+        radius: _nr,
+      ));
+    canvas.drawPath(
+      Path.combine(PathOperation.difference, outer, notch),
+      Paint()
+        ..style       = PaintingStyle.stroke
+        ..color       = borderColor
+        ..strokeWidth = 1.0
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HRNotchedBorderPainter old) =>
+      old.borderColor != borderColor;
 }
 
 // ── Shared widgets ────────────────────────────────────────────────────────────
@@ -1127,7 +1130,8 @@ class _UserAvatar extends StatelessWidget {
 
 void _showWelcomeDialog(BuildContext context, String fullName) {
   final firstName = fullName.trim().split(' ').first;
-  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final isDark    = Theme.of(context).brightness == Brightness.dark;
+  final l10n      = context.l10n;
 
   showDialog<void>(
     context: context,
@@ -1168,7 +1172,7 @@ void _showWelcomeDialog(BuildContext context, String fullName) {
               ),
               const SizedBox(height: 18),
               Text(
-                'Chào mừng, $firstName! 🎉',
+                l10n.welcomeGreeting(firstName),
                 style: TextStyle(
                   color: isDark ? Colors.white : const Color(0xFF111827),
                   fontSize: 20,
@@ -1178,7 +1182,7 @@ void _showWelcomeDialog(BuildContext context, String fullName) {
               ),
               const SizedBox(height: 8),
               Text(
-                'Bạn đã đăng nhập thành công vào HireGen AI.\nHãy bắt đầu tạo câu hỏi phỏng vấn ngay!',
+                l10n.welcomeBody,
                 style: TextStyle(
                   color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
                   fontSize: 13,
@@ -1197,9 +1201,9 @@ void _showWelcomeDialog(BuildContext context, String fullName) {
                         borderRadius: BorderRadius.circular(10)),
                     padding: const EdgeInsets.symmetric(vertical: 13),
                   ),
-                  child: const Text(
-                    'Bắt đầu',
-                    style: TextStyle(
+                  child: Text(
+                    l10n.getStarted,
+                    style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                     ),

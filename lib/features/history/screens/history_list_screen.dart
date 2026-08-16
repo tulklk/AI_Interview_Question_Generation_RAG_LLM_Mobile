@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/i18n/app_localizations.dart';
+import '../../../core/widgets/app_skeleton.dart';
 import '../../hr_generate/data/generation_api.dart';
 import '../../hr_generate/data/studio_repository.dart';
 import '../../hr_generate/domain/models/studio_models.dart';
@@ -567,13 +568,7 @@ class _HistoryListScreenState extends ConsumerState<HistoryListScreen> {
 
                 // ── List ───────────────────────────────────────────────────
                 if (hState.isLoading)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child:   CircularProgressIndicator(
-                          color: Color(0xFF6C47FF)),
-                    ),
-                  )
+                  HistorySkeletonList(isDark: isDark)
                 else if (hState.filtered.isEmpty)
                   _EmptyState(isDark: isDark)
                 else

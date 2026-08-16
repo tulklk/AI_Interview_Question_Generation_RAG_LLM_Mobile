@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+
+import '../../../core/i18n/app_localizations.dart';
+import '../../../core/providers/language_provider.dart';
+import '../../../core/providers/theme_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_avatar.dart';
-import '../../../core/widgets/app_elevated_card.dart';
 import '../../../core/widgets/app_gradient_button.dart';
 import '../../../core/widgets/app_text_field.dart';
-import '../../../core/providers/theme_provider.dart';
 import '../../../data/providers/app_providers.dart';
 import '../../../data/services/profile_service.dart';
 import '../../../data/services/storage_service.dart';
+import '../../subscription/subscription_provider.dart';
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 
 class HRProfileScreen extends ConsumerStatefulWidget {
   const HRProfileScreen({super.key});
@@ -21,62 +27,403 @@ class HRProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _HRProfileScreenState extends ConsumerState<HRProfileScreen> {
-  final _profileFormKey = GlobalKey<FormState>();
-  final _pwFormKey      = GlobalKey<FormState>();
-
-  final _nameCtrl      = TextEditingController();
-  final _phoneCtrl     = TextEditingController();
-  final _companyCtrl   = TextEditingController();
-  final _titleCtrl     = TextEditingController();
-  final _curPwCtrl     = TextEditingController();
-  final _newPwCtrl     = TextEditingController();
-  final _confirmPwCtrl = TextEditingController();
-
-  bool _isEditing    = false;
-  bool _isSaving     = false;
-  bool _isSavingPw   = false;
   bool _isLoggingOut = false;
-  bool _showCurPw    = false;
-  bool _showNewPw    = false;
-  bool _showConfPw   = false;
-  String? _profileMsg;
-  bool _profileSuccess = false;
-  String? _pwMsg;
-  bool _pwSuccess = false;
+
+  Future<void> _logout() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1A2235) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(l10n.signOutTitle,
+              style: AppTextStyles.h4.copyWith(
+                  color: isDark ? Colors.white : AppColors.nearBlack)),
+          content: Text(l10n.signOutBody,
+              style: AppTextStyles.body.copyWith(color: AppColors.gray500)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.cancel,
+                  style: AppTextStyles.body.copyWith(color: AppColors.gray500)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l10n.logout,
+                  style: AppTextStyles.body.copyWith(
+                      color: AppColors.error, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isLoggingOut = true);
+    await ref.read(authProvider.notifier).logout();
+  }
+
+  void _showEditProfileSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context:             context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder: (_) => _EditProfileSheet(
+        user:       ref.read(authProvider).user!,
+        onSaved:   () {},
+        authNotifier: ref.read(authProvider.notifier),
+      ),
+    );
+  }
+
+  void _showChangePasswordSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder: (_) => const _ChangePasswordSheet(),
+    );
+  }
+
+  void _showPersonalInfoSheet(BuildContext context, dynamic user, bool isDark) {
+    final l10n = AppLocalizations.of(context)!;
+    showModalBottomSheet<void>(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder: (_) {
+        final bg = isDark ? const Color(0xFF1A2235) : Colors.white;
+        return Container(
+          decoration: BoxDecoration(
+              color:        bg,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, MediaQuery.of(context).padding.bottom + 24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _SheetHandle(),
+            const SizedBox(height: 16),
+            Text(l10n.personalInformation,
+                style: AppTextStyles.h4.copyWith(
+                    color: isDark ? Colors.white : AppColors.nearBlack)),
+            const SizedBox(height: 20),
+            _InfoTile(label: 'Email',              value: user.email,                        isDark: isDark, locked: true),
+            _InfoTile(label: l10n.fullName,        value: user.name.isEmpty ? '—' : user.name, isDark: isDark),
+            _InfoTile(label: l10n.phoneNumber,     value: user.phone ?? '—',                 isDark: isDark),
+            _InfoTile(label: l10n.company,         value: user.company ?? '—',               isDark: isDark),
+            _InfoTile(label: l10n.jobTitle,        value: user.title ?? '—',                 isDark: isDark, last: true),
+          ]),
+        );
+      },
+    );
+  }
 
   @override
-  void initState() {
-    super.initState();
-    _populateFromUser();
-  }
+  Widget build(BuildContext context) {
+    final user      = ref.watch(authProvider).user;
+    if (user == null) return const SizedBox.shrink();
+    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final themeMode = ref.watch(themeProvider);
+    final lang      = ref.watch(languageProvider);
+    final l10n      = AppLocalizations.of(context)!;
 
-  void _populateFromUser() {
-    final user = ref.read(authProvider).user;
-    if (user == null) return;
-    _nameCtrl.text    = user.name;
-    _phoneCtrl.text   = user.phone    ?? '';
-    _companyCtrl.text = user.company  ?? '';
-    _titleCtrl.text   = user.title    ?? '';
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: CustomScrollView(
+        slivers: [
+          // ── Profile header ─────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: _ProfileHeaderCard(user: user, isDark: isDark)
+                .animate().fadeIn(duration: 300.ms),
+          ),
+
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+
+                // ── Account ─────────────────────────────────────────────────
+                _SectionLabel(l10n.account, isDark: isDark),
+                const SizedBox(height: 8),
+                _MenuCard(isDark: isDark, children: [
+                  _MenuItem(
+                    icon:   PhosphorIconsBold.userCircle,
+                    label:  l10n.manageProfile,
+                    isDark: isDark,
+                    onTap:  () => _showEditProfileSheet(context),
+                  ),
+                  _MenuDivider(isDark: isDark),
+                  _MenuItem(
+                    icon:   PhosphorIconsBold.identificationCard,
+                    label:  l10n.personalInformation,
+                    isDark: isDark,
+                    onTap:  () => _showPersonalInfoSheet(context, user, isDark),
+                  ),
+                ]).animate().fadeIn(delay: 60.ms),
+                const SizedBox(height: 20),
+
+                // ── Subscription ─────────────────────────────────────────────
+                _SectionLabel(l10n.subscriptionPlan, isDark: isDark),
+                const SizedBox(height: 8),
+                _MenuCard(isDark: isDark, children: [
+                  _MenuItem(
+                    icon:        PhosphorIconsBold.crown,
+                    label:       l10n.currentPlan,
+                    isDark:      isDark,
+                    showChevron: false,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const PlanBadgeWidget(),
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size:  20,
+                          color: isDark ? AppColors.gray500 : AppColors.gray400,
+                        ),
+                      ],
+                    ),
+                    onTap: () => context.go('/hr/subscription'),
+                  ),
+                ]).animate().fadeIn(delay: 90.ms),
+                const SizedBox(height: 20),
+
+                // ── Preferences ──────────────────────────────────────────────
+                _SectionLabel(l10n.settings, isDark: isDark),
+                const SizedBox(height: 8),
+                _MenuCard(isDark: isDark, children: [
+                  _MenuItem(
+                    icon:   PhosphorIconsBold.bell,
+                    label:  l10n.notificationsSection,
+                    isDark: isDark,
+                    onTap:  () {},
+                  ),
+                  _MenuDivider(isDark: isDark),
+                  _MenuItem(
+                    icon:        PhosphorIconsBold.globe,
+                    label:       l10n.language,
+                    isDark:      isDark,
+                    showChevron: false,
+                    trailing: GestureDetector(
+                      onTap: () => ref.read(languageProvider.notifier).toggle(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandPurple.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                              color: AppColors.brandPurple.withValues(alpha: 0.28)),
+                        ),
+                        child: Text(
+                          lang == 'vi' ? 'VI' : 'EN',
+                          style: TextStyle(
+                            color:      AppColors.brandPurple,
+                            fontSize:   12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    onTap: () => ref.read(languageProvider.notifier).toggle(),
+                  ),
+                  _MenuDivider(isDark: isDark),
+                  _MenuItem(
+                    icon:        PhosphorIconsBold.moon,
+                    label:       l10n.theme,
+                    isDark:      isDark,
+                    showChevron: false,
+                    trailing: Switch.adaptive(
+                      value:    themeMode == ThemeMode.dark,
+                      onChanged: (v) => ref.read(themeProvider.notifier)
+                          .setTheme(v ? ThemeMode.dark : ThemeMode.light),
+                      activeThumbColor: Colors.white,
+                      activeTrackColor: AppColors.brandPurple,
+                    ),
+                    onTap: null,
+                  ),
+                ]).animate().fadeIn(delay: 120.ms),
+                const SizedBox(height: 20),
+
+                // ── Security ─────────────────────────────────────────────────
+                _SectionLabel(l10n.securityTab, isDark: isDark),
+                const SizedBox(height: 8),
+                _MenuCard(isDark: isDark, children: [
+                  _MenuItem(
+                    icon:   PhosphorIconsBold.lockKey,
+                    label:  l10n.changePassword,
+                    isDark: isDark,
+                    onTap:  () => _showChangePasswordSheet(context),
+                  ),
+                ]).animate().fadeIn(delay: 160.ms),
+                const SizedBox(height: 28),
+
+                // ── Logout ───────────────────────────────────────────────────
+                SizedBox(
+                  width:  double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoggingOut ? null : _logout,
+                    icon: _isLoggingOut
+                        ? const SizedBox(
+                            width:  16,
+                            height: 16,
+                            child:  CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color:       Color(0xFFEF4444)))
+                        : const Icon(PhosphorIconsBold.signOut,
+                            size: 17, color: Color(0xFFEF4444)),
+                    label: Text(
+                      _isLoggingOut ? l10n.signingOut : l10n.logout,
+                      style: const TextStyle(
+                          color:      Color(0xFFEF4444),
+                          fontSize:   14,
+                          fontWeight: FontWeight.w600),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.5)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ).animate().fadeIn(delay: 200.ms),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
   }
+}
+
+// ── Profile header card ───────────────────────────────────────────────────────
+
+class _ProfileHeaderCard extends StatelessWidget {
+  final dynamic user;
+  final bool isDark;
+  const _ProfileHeaderCard({required this.user, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: isDark ? const Color(0xFF0F1629) : const Color(0xFFF8F7FF),
+      padding: EdgeInsets.fromLTRB(
+          24,
+          MediaQuery.of(context).padding.top + 20,
+          24,
+          28),
+      child: Column(children: [
+        // Avatar with gradient ring
+        Container(
+          padding:    const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: AppColors.primaryGradient,
+            boxShadow: [
+              BoxShadow(
+                color:      AppColors.brandPurple.withValues(alpha: 0.35),
+                blurRadius: 20,
+                spreadRadius: -4,
+                offset:     const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Container(
+            padding:    const EdgeInsets.all(2.5),
+            decoration: const BoxDecoration(
+                shape: BoxShape.circle, color: Colors.white),
+            child: AppAvatar(name: user.name, size: 78, showRing: false),
+          ),
+        ).animate().scale(duration: 380.ms, curve: Curves.elasticOut),
+        const SizedBox(height: 14),
+        Text(
+          user.name.isEmpty ? 'HR Manager' : user.name,
+          style: AppTextStyles.h2.copyWith(
+              color: isDark ? Colors.white : AppColors.nearBlack,
+              fontSize: 20),
+        ).animate().fadeIn(delay: 80.ms),
+        const SizedBox(height: 3),
+        if (user.title != null && user.title!.isNotEmpty) ...[
+          Text(
+            user.title!,
+            style: AppTextStyles.body.copyWith(
+                color: AppColors.brandPurple, fontWeight: FontWeight.w600),
+          ).animate().fadeIn(delay: 110.ms),
+          const SizedBox(height: 2),
+        ],
+        Text(
+          user.email,
+          style: AppTextStyles.caption.copyWith(color: AppColors.gray500),
+        ).animate().fadeIn(delay: 130.ms),
+        const SizedBox(height: 14),
+        // Company chip
+        if (user.company != null && user.company!.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            decoration: BoxDecoration(
+              color:        AppColors.brandPurple.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: AppColors.brandPurple.withValues(alpha: 0.25)),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(PhosphorIconsBold.buildings,
+                  size: 11, color: AppColors.brandPurple),
+              const SizedBox(width: 5),
+              Text(user.company!,
+                  style: TextStyle(
+                      color:      AppColors.brandPurple,
+                      fontSize:   12,
+                      fontWeight: FontWeight.w600)),
+            ]),
+          ).animate().fadeIn(delay: 150.ms),
+      ]),
+    );
+  }
+}
+
+// ── Edit profile bottom sheet ─────────────────────────────────────────────────
+
+class _EditProfileSheet extends ConsumerStatefulWidget {
+  final dynamic user;
+  final VoidCallback onSaved;
+  final dynamic authNotifier;
+  const _EditProfileSheet({
+    required this.user,
+    required this.onSaved,
+    required this.authNotifier,
+  });
+
+  @override
+  ConsumerState<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
+  final _formKey    = GlobalKey<FormState>();
+  late final _nameCtrl    = TextEditingController(text: widget.user.name);
+  late final _phoneCtrl   = TextEditingController(text: widget.user.phone ?? '');
+  late final _companyCtrl = TextEditingController(text: widget.user.company ?? '');
+  late final _titleCtrl   = TextEditingController(text: widget.user.title ?? '');
+  bool _saving = false;
+  String? _msg;
+  bool _success = false;
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _phoneCtrl.dispose();
-    _companyCtrl.dispose();
-    _titleCtrl.dispose();
-    _curPwCtrl.dispose();
-    _newPwCtrl.dispose();
-    _confirmPwCtrl.dispose();
+    _nameCtrl.dispose(); _phoneCtrl.dispose();
+    _companyCtrl.dispose(); _titleCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _saveProfile() async {
-    if (!_profileFormKey.currentState!.validate()) return;
-    setState(() { _isSaving = true; _profileMsg = null; });
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    final l10n = AppLocalizations.of(context)!;
+    setState(() { _saving = true; _msg = null; });
     try {
       final token = await StorageService.getAccessToken();
-      if (token == null || token.isEmpty) throw ProfileException('Phiên đăng nhập hết hạn.');
+      if (token == null || token.isEmpty) throw ProfileException(l10n.sessionExpired);
       await ProfileService.updateHRProfile(
         token:    token,
         fullName: _nameCtrl.text.trim(),
@@ -92,547 +439,467 @@ class _HRProfileScreenState extends ConsumerState<HRProfileScreen> {
         title:   _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
       ));
       if (!mounted) return;
-      setState(() { _isEditing = false; _profileSuccess = true; _profileMsg = 'Hồ sơ đã được cập nhật thành công.'; });
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) setState(() { _profileMsg = null; _profileSuccess = false; });
-      });
+      setState(() { _success = true; _msg = l10n.profileUpdated; });
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) Navigator.of(context).pop();
     } on ProfileException catch (e) {
-      if (mounted) setState(() { _profileSuccess = false; _profileMsg = e.message; });
+      if (mounted) setState(() { _success = false; _msg = e.message; });
     } catch (_) {
-      if (mounted) setState(() { _profileSuccess = false; _profileMsg = 'Có lỗi xảy ra. Vui lòng thử lại.'; });
+      if (mounted) setState(() { _success = false; _msg = AppLocalizations.of(context)!.genericError; });
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _savePassword() async {
-    if (!_pwFormKey.currentState!.validate()) return;
-    setState(() { _isSavingPw = true; _pwMsg = null; });
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg     = isDark ? const Color(0xFF1A2235) : Colors.white;
+    final mq     = MediaQuery.of(context);
+    final l10n   = AppLocalizations.of(context)!;
+
+    return Container(
+      height:     mq.size.height * 0.88,
+      decoration: BoxDecoration(
+          color:        bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+      child: Column(children: [
+        _SheetHandle(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+          child: Row(children: [
+            Text(l10n.manageProfile,
+                style: AppTextStyles.h4.copyWith(
+                    color: isDark ? Colors.white : AppColors.nearBlack)),
+            const Spacer(),
+            IconButton(
+              icon: Icon(Icons.close_rounded,
+                  color: isDark ? AppColors.gray400 : AppColors.gray500),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ]),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, mq.padding.bottom + 20),
+            child: Form(
+              key: _formKey,
+              child: Column(children: [
+                if (_msg != null) ...[
+                  _StatusBanner(message: _msg!, success: _success),
+                  const SizedBox(height: 14),
+                ],
+                AppTextField(
+                  label:     '${l10n.fullName} *',
+                  hint:      'Nguyễn Văn A',
+                  controller: _nameCtrl,
+                  validator: (v) =>
+                      (v?.trim().isEmpty ?? true) ? 'Vui lòng nhập họ tên' : null,
+                ),
+                const SizedBox(height: 12),
+                AppTextField(
+                  label:        l10n.phoneNumber,
+                  hint:         '+84 xxx xxx xxx',
+                  controller:   _phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+                AppTextField(
+                  label:      l10n.company,
+                  hint:       'FPT Software',
+                  controller: _companyCtrl,
+                ),
+                const SizedBox(height: 12),
+                AppTextField(
+                  label:      l10n.jobTitle,
+                  hint:       'Senior HR Manager',
+                  controller: _titleCtrl,
+                ),
+                const SizedBox(height: 20),
+                AppGradientButton(
+                  label:     l10n.saveChanges_,
+                  isLoading: _saving,
+                  onTap:     _saving ? null : _save,
+                  height:    50,
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Change password bottom sheet ──────────────────────────────────────────────
+
+class _ChangePasswordSheet extends ConsumerStatefulWidget {
+  const _ChangePasswordSheet();
+
+  @override
+  ConsumerState<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
+}
+
+class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
+  final _formKey      = GlobalKey<FormState>();
+  final _curPwCtrl    = TextEditingController();
+  final _newPwCtrl    = TextEditingController();
+  final _confirmCtrl  = TextEditingController();
+  bool _saving       = false;
+  bool _showCur      = false;
+  bool _showNew      = false;
+  bool _showConf     = false;
+  String? _msg;
+  bool _success      = false;
+
+  @override
+  void dispose() {
+    _curPwCtrl.dispose(); _newPwCtrl.dispose(); _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    final l10n = AppLocalizations.of(context)!;
+    setState(() { _saving = true; _msg = null; });
     try {
       final token = await StorageService.getAccessToken();
-      if (token == null || token.isEmpty) throw ProfileException('Phiên đăng nhập hết hạn.');
+      if (token == null || token.isEmpty) throw ProfileException(l10n.sessionExpired);
       await ProfileService.changePassword(
         token:           token,
         currentPassword: _curPwCtrl.text,
         newPassword:     _newPwCtrl.text,
       );
-      _curPwCtrl.clear();
-      _newPwCtrl.clear();
-      _confirmPwCtrl.clear();
+      _curPwCtrl.clear(); _newPwCtrl.clear(); _confirmCtrl.clear();
       if (!mounted) return;
-      setState(() { _pwSuccess = true; _pwMsg = 'Mật khẩu đã được thay đổi thành công.'; });
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) setState(() { _pwMsg = null; _pwSuccess = false; });
-      });
+      setState(() { _success = true; _msg = l10n.passwordChanged; });
+      await Future.delayed(const Duration(milliseconds: 900));
+      if (mounted) Navigator.of(context).pop();
     } on ProfileException catch (e) {
-      if (mounted) setState(() { _pwSuccess = false; _pwMsg = e.message; });
+      if (mounted) setState(() { _success = false; _msg = e.message; });
     } catch (_) {
-      if (mounted) setState(() { _pwSuccess = false; _pwMsg = 'Có lỗi xảy ra. Vui lòng thử lại.'; });
+      if (mounted) setState(() { _success = false; _msg = AppLocalizations.of(context)!.genericError; });
     } finally {
-      if (mounted) setState(() => _isSavingPw = false);
+      if (mounted) setState(() => _saving = false);
     }
   }
-
-  Future<void> _logout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return AlertDialog(
-          backgroundColor: isDark ? const Color(0xFF1A2235) : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Xác nhận đăng xuất',
-              style: AppTextStyles.h4.copyWith(
-                  color: isDark ? Colors.white : AppColors.nearBlack)),
-          content: Text('Bạn có chắc chắn muốn đăng xuất không?',
-              style: AppTextStyles.body.copyWith(color: AppColors.gray500)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Hủy',
-                  style: AppTextStyles.body.copyWith(color: AppColors.gray500)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text('Đăng xuất',
-                  style: AppTextStyles.body.copyWith(
-                      color: AppColors.error, fontWeight: FontWeight.w700)),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _isLoggingOut = true);
-    await ref.read(authProvider.notifier).logout();
-    // GoRouter redirect handles navigation when auth.user becomes null (AC-04, AC-05)
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final user = ref.watch(authProvider).user;
-    if (user == null) return const SizedBox.shrink();
-    final isDark = ref.watch(themeProvider) == ThemeMode.dark;
-    final theme  = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: CustomScrollView(
-        slivers: [
-          // ── Header ──────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _ProfileHeader(user: user, isDark: theme),
-          ),
-
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-
-                // Success / error banner (profile)
-                if (_profileMsg != null)
-                  _MessageBanner(message: _profileMsg!, success: _profileSuccess)
-                      .animate().fadeIn(duration: 250.ms).slideY(begin: -0.2, end: 0),
-                if (_profileMsg != null) const SizedBox(height: 12),
-
-                // ── Profile info / edit form ───────────────────────────
-                AppElevatedCard(
-                  interactive: false,
-                  accentColor: AppColors.brandPurple,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Section header
-                      Row(children: [
-                        _SectionIcon(
-                          icon: PhosphorIconsBold.identificationCard,
-                          gradient: AppColors.primaryGradient,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text('Thông tin hồ sơ',
-                              style: AppTextStyles.h4.copyWith(
-                                  color: theme ? AppColors.white : AppColors.nearBlack)),
-                        ),
-                        if (!_isEditing)
-                          _EditButton(onTap: () => setState(() => _isEditing = true)),
-                      ]),
-                      const SizedBox(height: 16),
-
-                      if (!_isEditing) ...[
-                        _InfoRow(label: 'Email', value: user.email, isDark: theme, locked: true),
-                        _InfoRow(label: 'Họ tên', value: user.name.isEmpty ? '—' : user.name, isDark: theme),
-                        _InfoRow(label: 'Số điện thoại', value: user.phone ?? '—', isDark: theme),
-                        _InfoRow(label: 'Công ty', value: user.company ?? '—', isDark: theme),
-                        _InfoRow(label: 'Chức danh', value: user.title ?? '—', isDark: theme, last: true),
-                      ] else ...[
-                        Form(
-                          key: _profileFormKey,
-                          child: Column(children: [
-                            AppTextField(
-                              label: 'Họ tên *',
-                              hint: 'Nguyễn Văn A',
-                              controller: _nameCtrl,
-                              validator: (v) =>
-                                  (v?.trim().isEmpty ?? true) ? 'Vui lòng nhập họ tên' : null,
-                            ),
-                            const SizedBox(height: 12),
-                            AppTextField(
-                              label: 'Số điện thoại',
-                              hint: '+84 xxx xxx xxx',
-                              controller: _phoneCtrl,
-                              keyboardType: TextInputType.phone,
-                            ),
-                            const SizedBox(height: 12),
-                            AppTextField(
-                              label: 'Tên công ty',
-                              hint: 'FPT Software',
-                              controller: _companyCtrl,
-                            ),
-                            const SizedBox(height: 12),
-                            AppTextField(
-                              label: 'Chức danh',
-                              hint: 'Senior HR Manager',
-                              controller: _titleCtrl,
-                            ),
-                          ]),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(children: [
-                          Expanded(
-                            child: _OutlineButton(
-                              label: 'Hủy',
-                              onTap: () {
-                                _populateFromUser();
-                                setState(() { _isEditing = false; _profileMsg = null; });
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: AppGradientButton(
-                              label: 'Lưu',
-                              isLoading: _isSaving,
-                              onTap: _isSaving ? null : _saveProfile,
-                              height: 46,
-                            ),
-                          ),
-                        ]),
-                      ],
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 80.ms),
-                const SizedBox(height: 16),
-
-                // ── Change password ───────────────────────────────────
-                AppElevatedCard(
-                  interactive: false,
-                  accentColor: AppColors.deepBlue,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(children: [
-                        _SectionIcon(
-                          icon: PhosphorIconsBold.lockKey,
-                          gradient: const LinearGradient(
-                              colors: [Color(0xFF3B82F6), Color(0xFF6C47FF)]),
-                        ),
-                        const SizedBox(width: 10),
-                        Text('Đổi mật khẩu',
-                            style: AppTextStyles.h4.copyWith(
-                                color: theme ? AppColors.white : AppColors.nearBlack)),
-                      ]),
-                      const SizedBox(height: 16),
-                      if (_pwMsg != null) ...[
-                        _MessageBanner(message: _pwMsg!, success: _pwSuccess),
-                        const SizedBox(height: 12),
-                      ],
-                      Form(
-                        key: _pwFormKey,
-                        child: Column(children: [
-                          AppTextField(
-                            label: 'Mật khẩu hiện tại *',
-                            hint: '••••••••',
-                            controller: _curPwCtrl,
-                            obscureText: !_showCurPw,
-                            suffix: _EyeToggle(
-                                show: _showCurPw,
-                                onToggle: () => setState(() => _showCurPw = !_showCurPw)),
-                            validator: (v) =>
-                                (v?.isEmpty ?? true) ? 'Vui lòng nhập mật khẩu hiện tại' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          AppTextField(
-                            label: 'Mật khẩu mới *',
-                            hint: '••••••••',
-                            controller: _newPwCtrl,
-                            obscureText: !_showNewPw,
-                            suffix: _EyeToggle(
-                                show: _showNewPw,
-                                onToggle: () => setState(() => _showNewPw = !_showNewPw)),
-                            validator: (v) {
-                              if (v?.isEmpty ?? true) return 'Vui lòng nhập mật khẩu mới';
-                              if (v!.length < 6) return 'Tối thiểu 6 ký tự';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          AppTextField(
-                            label: 'Xác nhận mật khẩu mới *',
-                            hint: '••••••••',
-                            controller: _confirmPwCtrl,
-                            obscureText: !_showConfPw,
-                            suffix: _EyeToggle(
-                                show: _showConfPw,
-                                onToggle: () => setState(() => _showConfPw = !_showConfPw)),
-                            validator: (v) =>
-                                v != _newPwCtrl.text ? 'Mật khẩu xác nhận không khớp' : null,
-                          ),
-                        ]),
-                      ),
-                      const SizedBox(height: 16),
-                      AppGradientButton(
-                        label: 'Đổi mật khẩu',
-                        isLoading: _isSavingPw,
-                        onTap: _isSavingPw ? null : _savePassword,
-                        height: 46,
-                      ),
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 150.ms),
-                const SizedBox(height: 16),
-
-                // ── Settings ─────────────────────────────────────────
-                AppElevatedCard(
-                  interactive: false,
-                  child: Column(children: [
-                    _SettingsRow(
-                      icon: PhosphorIconsBold.moon,
-                      label: 'Dark Mode',
-                      gradient: const LinearGradient(
-                          colors: [Color(0xFF6C47FF), Color(0xFF3B82F6)]),
-                      isDark: theme,
-                      trailing: Switch.adaptive(
-                        value: isDark,
-                        onChanged: (v) => ref.read(themeProvider.notifier).setTheme(v ? ThemeMode.dark : ThemeMode.light),
-                        activeThumbColor: Colors.white,
-                        activeTrackColor: AppColors.brandPurple,
-                      ),
-                    ),
-                  ]),
-                ).animate().fadeIn(delay: 210.ms),
-                const SizedBox(height: 24),
-
-                AppGradientButton(
-                  label: _isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất',
-                  isLoading: _isLoggingOut,
-                  onTap: _isLoggingOut ? null : _logout,
-                  height: 52,
-                ).animate().fadeIn(delay: 260.ms),
-              ]),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Profile header ────────────────────────────────────────────────────────────
-
-class _ProfileHeader extends StatelessWidget {
-  final dynamic user;
-  final bool isDark;
-  const _ProfileHeader({required this.user, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF0F1629), const Color(0xFF080A16)]
-              : [const Color(0xFFEEEAFF), AppColors.offWhite],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
-          child: Column(children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: AppColors.primaryGradient,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.brandPurple.withValues(alpha: 0.38),
-                    blurRadius: 24,
-                    spreadRadius: -4,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(
-                    shape: BoxShape.circle, color: Colors.white),
-                child: AppAvatar(name: user.name, size: 82, showRing: false),
-              ),
-            ).animate().scale(duration: 400.ms, curve: Curves.elasticOut),
-            const SizedBox(height: 14),
-            Text(
-              user.name.isEmpty ? 'HR Manager' : user.name,
-              style: AppTextStyles.h2.copyWith(
-                  color: isDark ? AppColors.white : AppColors.nearBlack),
-            ).animate().fadeIn(delay: 100.ms),
-            const SizedBox(height: 4),
-            Text(
-              user.title ?? 'HR Manager',
-              style: AppTextStyles.body
-                  .copyWith(color: AppColors.brandPurple, fontWeight: FontWeight.w600),
-            ).animate().fadeIn(delay: 140.ms),
-            const SizedBox(height: 2),
-            Text(
-              user.email,
-              style: AppTextStyles.caption.copyWith(color: AppColors.gray500),
-            ).animate().fadeIn(delay: 170.ms),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Shared sub-widgets ────────────────────────────────────────────────────────
-
-class _SectionIcon extends StatelessWidget {
-  final IconData icon;
-  final Gradient gradient;
-  const _SectionIcon({required this.icon, required this.gradient});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          gradient: gradient,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.brandPurple.withValues(alpha: 0.25),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Icon(icon, size: 15, color: Colors.white),
-      );
-}
-
-class _EditButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _EditButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: onTap,
+    final bg     = isDark ? const Color(0xFF1A2235) : Colors.white;
+    final mq     = MediaQuery.of(context);
+    final l10n   = AppLocalizations.of(context)!;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.brandPurple.withValues(alpha: isDark ? 0.4 : 0.25),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
+            color:        bg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+        padding: EdgeInsets.fromLTRB(20, 6, 20, mq.padding.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          _SheetHandle(),
+          const SizedBox(height: 12),
+          Row(children: [
+            Text(l10n.changePassword,
+                style: AppTextStyles.h4.copyWith(
+                    color: isDark ? Colors.white : AppColors.nearBlack)),
+            const Spacer(),
+            IconButton(
+              icon: Icon(Icons.close_rounded,
+                  color: isDark ? AppColors.gray400 : AppColors.gray500),
+              onPressed: () => Navigator.of(context).pop(),
             ),
+          ]),
+          const SizedBox(height: 8),
+          if (_msg != null) ...[
+            _StatusBanner(message: _msg!, success: _success),
+            const SizedBox(height: 12),
           ],
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(PhosphorIconsBold.pencilSimple, size: 12, color: Colors.white),
-          const SizedBox(width: 5),
-          Text('Chỉnh sửa',
-              style: AppTextStyles.caption.copyWith(
-                  color: Colors.white, fontWeight: FontWeight.w600)),
+          Form(
+            key: _formKey,
+            child: Column(children: [
+              AppTextField(
+                label:       '${l10n.currentPasswordLabel} *',
+                hint:        '••••••••',
+                controller:  _curPwCtrl,
+                obscureText: !_showCur,
+                suffix: IconButton(
+                  icon: Icon(
+                    _showCur ? PhosphorIconsBold.eyeSlash : PhosphorIconsBold.eye,
+                    size: 18, color: AppColors.gray400),
+                  onPressed: () => setState(() => _showCur = !_showCur),
+                ),
+                validator: (v) =>
+                    (v?.isEmpty ?? true) ? 'Vui lòng nhập mật khẩu hiện tại' : null,
+              ),
+              const SizedBox(height: 12),
+              AppTextField(
+                label:       '${l10n.newPasswordLabel} *',
+                hint:        '••••••••',
+                controller:  _newPwCtrl,
+                obscureText: !_showNew,
+                suffix: IconButton(
+                  icon: Icon(
+                    _showNew ? PhosphorIconsBold.eyeSlash : PhosphorIconsBold.eye,
+                    size: 18, color: AppColors.gray400),
+                  onPressed: () => setState(() => _showNew = !_showNew),
+                ),
+                validator: (v) {
+                  if (v?.isEmpty ?? true) return 'Vui lòng nhập mật khẩu mới';
+                  if (v!.length < 6) return 'Tối thiểu 6 ký tự';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              AppTextField(
+                label:       '${l10n.confirmPasswordLabel} *',
+                hint:        '••••••••',
+                controller:  _confirmCtrl,
+                obscureText: !_showConf,
+                suffix: IconButton(
+                  icon: Icon(
+                    _showConf ? PhosphorIconsBold.eyeSlash : PhosphorIconsBold.eye,
+                    size: 18, color: AppColors.gray400),
+                  onPressed: () => setState(() => _showConf = !_showConf),
+                ),
+                validator: (v) =>
+                    v != _newPwCtrl.text ? 'Mật khẩu xác nhận không khớp' : null,
+              ),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          AppGradientButton(
+            label:     l10n.changePassword,
+            isLoading: _saving,
+            onTap:     _saving ? null : _save,
+            height:    50,
+          ),
         ]),
       ),
     );
   }
 }
 
-class _OutlineButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _OutlineButton({required this.label, required this.onTap});
+// ── Shared UI atoms ───────────────────────────────────────────────────────────
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  final bool isDark;
+  const _SectionLabel(this.text, {required this.isDark});
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isDark ? AppColors.gray500 : AppColors.gray200,
-          ),
-        ),
-        child: Center(
-          child: Text(label,
-              style: AppTextStyles.buttonText.copyWith(
-                  color: isDark ? AppColors.white : AppColors.nearBlack)),
-        ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 4, bottom: 2),
+    child: Text(
+      text.toUpperCase(),
+      style: TextStyle(
+        color:         isDark ? AppColors.gray500 : AppColors.gray400,
+        fontSize:      11,
+        fontWeight:    FontWeight.w700,
+        letterSpacing: 0.9,
       ),
-    );
-  }
+    ),
+  );
 }
 
-class _InfoRow extends StatelessWidget {
+class _MenuCard extends StatelessWidget {
+  final bool isDark;
+  final List<Widget> children;
+  const _MenuCard({required this.isDark, required this.children});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color:        AppColors.cardBg(isDark),
+      borderRadius: BorderRadius.circular(14),
+      border:       Border.all(color: AppColors.borderColor(isDark)),
+      boxShadow: isDark
+          ? null
+          : [
+              BoxShadow(
+                color:      Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset:     const Offset(0, 2),
+              ),
+            ],
+    ),
+    child: Column(children: children),
+  );
+}
+
+class _MenuItem extends StatelessWidget {
+  final IconData      icon;
+  final String        label;
+  final bool          isDark;
+  final bool          showChevron;
+  final Widget?       trailing;
+  final VoidCallback? onTap;
+
+  const _MenuItem({
+    required this.icon,
+    required this.label,
+    required this.isDark,
+    this.showChevron = true,
+    this.trailing,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color:        Colors.transparent,
+    borderRadius: BorderRadius.circular(14),
+    child: InkWell(
+      onTap:        onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        child: Row(children: [
+          // Icon container
+          Container(
+            width:  38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.black.withValues(alpha: 0.055),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 17, color: AppColors.textPrimary(isDark)),
+          ),
+          const SizedBox(width: 12),
+          // Label
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color:      AppColors.textPrimary(isDark),
+                fontSize:   14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          // Trailing widget or chevron
+          if (trailing != null)
+            trailing!
+          else if (showChevron)
+            Icon(
+              Icons.chevron_right_rounded,
+              size:  20,
+              color: isDark ? AppColors.gray500 : AppColors.gray400,
+            ),
+        ]),
+      ),
+    ),
+  );
+}
+
+class _MenuDivider extends StatelessWidget {
+  final bool isDark;
+  const _MenuDivider({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) => Divider(
+    height: 1,
+    indent: 64,
+    color:  AppColors.borderColor(isDark),
+  );
+}
+
+class _SheetHandle extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      margin: const EdgeInsets.only(top: 10),
+      width:  36,
+      height: 4,
+      decoration: BoxDecoration(
+        color:        Colors.grey.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    ),
+  );
+}
+
+class _InfoTile extends StatelessWidget {
   final String label;
   final String value;
-  final bool isDark;
-  final bool locked;
-  final bool last;
-  const _InfoRow({
+  final bool   isDark;
+  final bool   locked;
+  final bool   last;
+
+  const _InfoTile({
     required this.label,
     required this.value,
     required this.isDark,
     this.locked = false,
-    this.last = false,
+    this.last   = false,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 2),
+        child: Row(children: [
           SizedBox(
-            width: 110,
-            child: Text(label, style: AppTextStyles.caption.copyWith(fontSize: 12)),
+            width: 120,
+            child: Text(label,
+                style: AppTextStyles.caption.copyWith(
+                    color: isDark ? AppColors.gray500 : AppColors.gray400,
+                    fontSize: 12)),
           ),
           Expanded(
             child: Row(children: [
               Flexible(
-                child: Text(
-                  value,
-                  style: AppTextStyles.label.copyWith(
-                    color: isDark ? AppColors.white : AppColors.nearBlack,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: Text(value,
+                    style: AppTextStyles.label.copyWith(
+                      color:      isDark ? Colors.white : AppColors.nearBlack,
+                      fontWeight: FontWeight.w500,
+                    )),
               ),
               if (locked) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Icon(PhosphorIconsBold.lockSimple,
-                    size: 11,
-                    color: AppColors.gray400),
+                    size: 11, color: AppColors.gray400),
               ],
             ]),
           ),
         ]),
-        if (!last) ...[
-          const SizedBox(height: 8),
-          Divider(
-            height: 1,
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : AppColors.gray200.withValues(alpha: 0.6),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ],
-    );
-  }
+      ),
+      if (!last)
+        Divider(
+          height: 1,
+          color:  isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : AppColors.gray200,
+        ),
+    ],
+  );
 }
 
-class _MessageBanner extends StatelessWidget {
+class _StatusBanner extends StatelessWidget {
   final String message;
-  final bool success;
-  const _MessageBanner({required this.message, required this.success});
+  final bool   success;
+  const _StatusBanner({required this.message, required this.success});
 
   @override
   Widget build(BuildContext context) {
-    final color = success ? AppColors.teal : AppColors.error;
-    final icon  = success ? PhosphorIconsBold.checkCircle : PhosphorIconsBold.warningCircle;
+    final color = success ? const Color(0xFF10B981) : AppColors.error;
+    final icon  = success
+        ? PhosphorIconsBold.checkCircle
+        : PhosphorIconsBold.warningCircle;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding:    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
+        color:        color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        border:       Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(children: [
-        Icon(icon, size: 16, color: color),
+        Icon(icon, size: 15, color: color),
         const SizedBox(width: 8),
         Expanded(
           child: Text(message,
@@ -643,65 +910,3 @@ class _MessageBanner extends StatelessWidget {
     );
   }
 }
-
-class _EyeToggle extends StatelessWidget {
-  final bool show;
-  final VoidCallback onToggle;
-  const _EyeToggle({required this.show, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-        icon: Icon(
-          show ? PhosphorIconsBold.eyeSlash : PhosphorIconsBold.eye,
-          size: 18,
-          color: AppColors.gray400,
-        ),
-        onPressed: onToggle,
-      );
-}
-
-class _SettingsRow extends StatelessWidget {
-  final IconData icon;
-  final Gradient gradient;
-  final String label;
-  final bool isDark;
-  final Widget trailing;
-  const _SettingsRow({
-    required this.icon,
-    required this.gradient,
-    required this.label,
-    required this.isDark,
-    required this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              gradient: gradient,
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.brandPurple.withValues(alpha: 0.25),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Icon(icon, size: 16, color: Colors.white),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(label,
-                style: AppTextStyles.label.copyWith(
-                    color: isDark ? AppColors.white : AppColors.nearBlack)),
-          ),
-          trailing,
-        ]),
-      );
-}
-

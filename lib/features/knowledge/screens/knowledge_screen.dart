@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/app_localizations.dart';
+import '../../../core/widgets/app_skeleton.dart';
 import '../../hr_generate/data/generation_api.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -359,12 +360,9 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
 
                 // ── Doc list ──────────────────────────────────────────────
                 if (kState.isLoading)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child:   CircularProgressIndicator(
-                          color: Color(0xFF6C47FF)),
-                    ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: KnowledgeSkeletonList(isDark: isDark),
                   )
                 else if (kState.filtered.isEmpty)
                   _EmptyState(isDark: isDark)

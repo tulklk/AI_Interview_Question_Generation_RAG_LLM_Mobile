@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/i18n/app_localizations.dart';
+import '../../../../core/widgets/app_skeleton.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
@@ -198,7 +199,7 @@ class _Body extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (state.isLoading && state.invitations.isEmpty) {
-      return _Skeleton(isDark: isDark);
+      return InvitationSkeletonList(isDark: isDark);
     }
 
     if (state.error != null && state.invitations.isEmpty) {
@@ -1205,46 +1206,3 @@ class _CompanyAvatar extends StatelessWidget {
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-class _Skeleton extends StatelessWidget {
-  final bool isDark;
-  const _Skeleton({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    final cardBg = isDark ? AppColors.darkSurface : AppColors.white;
-    final shimmer = isDark ? AppColors.darkChip : AppColors.gray200;
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
-      itemCount: 4,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, i) => Container(
-        height: 120,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark ? AppColors.darkChip : AppColors.gray200,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Container(width: 40, height: 40, decoration: BoxDecoration(color: shimmer, borderRadius: BorderRadius.circular(10))),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(height: 14, width: 120, color: shimmer, margin: const EdgeInsets.only(bottom: 6)),
-                Container(height: 11, width: 80, color: shimmer),
-              ])),
-              Container(height: 22, width: 70, decoration: BoxDecoration(color: shimmer, borderRadius: BorderRadius.circular(6))),
-            ]),
-            const SizedBox(height: 12),
-            Container(height: 13, width: double.infinity, color: shimmer, margin: const EdgeInsets.only(bottom: 6)),
-            Container(height: 13, width: 200, color: shimmer),
-          ],
-        ),
-      ).animate(delay: Duration(milliseconds: i * 60)).fadeIn(),
-    );
-  }
-}

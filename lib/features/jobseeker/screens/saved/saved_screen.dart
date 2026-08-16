@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/i18n/app_localizations.dart';
+import '../../../../core/widgets/app_skeleton.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
 
@@ -118,7 +119,7 @@ class _Body extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (state.isLoading && sets.isEmpty) {
-      return _Skeleton(isDark: isDark, cardBg: cardBg, border: border);
+      return SavedSetSkeletonList(isDark: isDark);
     }
 
     if (state.error != null && sets.isEmpty) {
@@ -562,53 +563,3 @@ class _ErrorState extends StatelessWidget {
   }
 }
 
-// ── Skeleton loader ───────────────────────────────────────────────────────────
-
-class _Skeleton extends StatelessWidget {
-  final bool isDark;
-  final Color cardBg, border;
-  const _Skeleton({required this.isDark, required this.cardBg, required this.border});
-
-  @override
-  Widget build(BuildContext context) {
-    final shimmer = isDark ? AppColors.darkChip : AppColors.gray200;
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
-      itemCount: 5,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, i) => Container(
-        height: 90,
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: border),
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: shimmer,
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(height: 14, width: 180, color: shimmer, margin: const EdgeInsets.only(bottom: 6)),
-                  Container(height: 11, width: 100, color: shimmer, margin: const EdgeInsets.only(bottom: 6)),
-                  Container(height: 10, width: 140, color: shimmer),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ).animate(delay: Duration(milliseconds: i * 60)).fadeIn(),
-    );
-  }
-}

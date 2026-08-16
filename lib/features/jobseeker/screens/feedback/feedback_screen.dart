@@ -9,6 +9,7 @@ import '../../../../core/i18n/app_localizations.dart';
 import '../../../../core/widgets/grid_background.dart';
 import '../../models/jobseeker_models.dart';
 import '../../providers/jobseeker_providers.dart';
+import '../../../../core/widgets/app_skeleton.dart';
 
 const _kPrimary = Color(0xFF6C47FF);
 
@@ -110,13 +111,7 @@ class FeedbackScreen extends ConsumerWidget {
     final async  = ref.watch(feedbackProvider(setId));
 
     return async.when(
-      loading: () => Scaffold(
-        backgroundColor: c.bg,
-        appBar: _buildAppBar(context, l10n, c),
-        body: const Center(
-          child: CircularProgressIndicator(color: _kPrimary, strokeWidth: 2.5),
-        ),
-      ),
+      loading: () => FeedbackResultSkeleton(isDark: isDark),
       error: (e, _) => Scaffold(
         backgroundColor: c.bg,
         appBar: _buildAppBar(context, l10n, c),

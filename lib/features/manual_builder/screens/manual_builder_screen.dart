@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/i18n/app_localizations.dart';
 import '../../../core/widgets/grid_background.dart';
 import '../../hr_generate/data/generation_api.dart';
 import '../../hr_generate/domain/enums/difficulty_level.dart';
@@ -339,8 +340,13 @@ class _ManualBuilderScreenState extends ConsumerState<ManualBuilderScreen> {
       body: GridBackdrop(
         child: Column(
         children: [
+          if (state.step <= 2)
+            _ModeToggleBar(isDark: isDark),
           _StepBar4(current: state.step, isDark: isDark),
-          const Divider(height: 1, thickness: 1, color: Color(0xFF1E2640)),
+          Divider(
+            height: 1, thickness: 1,
+            color: isDark ? const Color(0xFF1E2640) : const Color(0xFFE5E7EB),
+          ),
           Expanded(child: _buildStep(state, isDark, gc)),
         ],
       ),
@@ -350,6 +356,7 @@ class _ManualBuilderScreenState extends ConsumerState<ManualBuilderScreen> {
 
   PreferredSizeWidget _buildAppBar(BuildContext ctx, ManualBuilderState state,
       bool isDark) {
+    final l10n = AppLocalizations.of(ctx)!;
     return AppBar(
       backgroundColor:  isDark ? const Color(0xFF0B1020) : Colors.white,
       elevation:        0,
@@ -360,10 +367,10 @@ class _ManualBuilderScreenState extends ConsumerState<ManualBuilderScreen> {
         onPressed: () => _confirmExit(ctx, state),
       ),
       title: Text(
-        'Tạo bộ câu hỏi thủ công',
+        l10n.manualCreate,
         style: TextStyle(
             color: isDark ? Colors.white : const Color(0xFF111827),
-            fontSize:   16,
+            fontSize:   17,
             fontWeight: FontWeight.w700),
       ),
       actions: [
@@ -432,20 +439,24 @@ class _ManualBuilderScreenState extends ConsumerState<ManualBuilderScreen> {
       ctx.pop();
       return;
     }
+    final l10n = AppLocalizations.of(ctx)!;
+    final isVi = l10n.isVi;
     final ok = await showDialog<bool>(
       context: ctx,
       builder: (d) => AlertDialog(
-        title: const Text('Thoát?'),
-        content: const Text('Tiến trình chưa lưu sẽ bị mất.'),
+        title: Text(isVi ? 'Thoát?' : 'Exit?'),
+        content: Text(isVi
+            ? 'Tiến trình chưa lưu sẽ bị mất.'
+            : 'Unsaved progress will be lost.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(d, false),
-              child: const Text('Ở lại')),
+              child: Text(isVi ? 'Ở lại' : 'Stay')),
           FilledButton(
             onPressed: () => Navigator.pop(d, true),
             style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFEF4444)),
-            child: const Text('Thoát'),
+            child: Text(isVi ? 'Thoát' : 'Exit'),
           ),
         ],
       ),
@@ -462,7 +473,6 @@ class _ManualBuilderScreenState extends ConsumerState<ManualBuilderScreen> {
 class _StepBar4 extends StatelessWidget {
   final int current;
   final bool isDark;
-  static const _labels = ['Info', 'Câu hỏi', 'Xem lại', 'Lưu'];
 
   const _StepBar4({
     required this.current,
@@ -471,11 +481,16 @@ class _StepBar4 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final labels = l10n.isVi
+        ? ['Thông tin', 'Câu hỏi', 'Xem lại', 'Hoàn tất']
+        : ['Info', 'Questions', 'Review', 'Done'];
+
     return Container(
       color: isDark ? const Color(0xFF0B1020) : Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
-        children: List.generate(_labels.length * 2 - 1, (i) {
+        children: List.generate(labels.length * 2 - 1, (i) {
           if (i.isOdd) {
             // Connector line
             final stepBefore = (i ~/ 2) + 1;
@@ -485,16 +500,20 @@ class _StepBar4 extends StatelessWidget {
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: done ? GenColors.primary : const Color(0xFF2D3562),
+                  color: done
+                      ? GenColors.primary
+                      : (isDark ? const Color(0xFF2D3562) : const Color(0xFFE2E4EA)),
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
             );
           }
-          final step = i ~/ 2 + 1;
-          final done    = step < current;
-          final active  = step == current;
-          final color   = (done || active) ? GenColors.primary : const Color(0xFF4A5578);
+          final step   = i ~/ 2 + 1;
+          final done   = step < current;
+          final active = step == current;
+          final color  = (done || active)
+              ? GenColors.primary
+              : (isDark ? const Color(0xFF4A5578) : const Color(0xFF9CA3AF));
 
           return Column(
             mainAxisSize: MainAxisSize.min,
@@ -508,10 +527,12 @@ class _StepBar4 extends StatelessWidget {
                       ? GenColors.primary
                       : active
                           ? GenColors.primary.withValues(alpha: 0.15)
-                          : const Color(0xFF1E2640),
+                          : (isDark ? const Color(0xFF1E2640) : const Color(0xFFF3F4F6)),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: (done || active) ? GenColors.primary : const Color(0xFF2D3562),
+                    color: (done || active)
+                        ? GenColors.primary
+                        : (isDark ? const Color(0xFF2D3562) : const Color(0xFFE2E4EA)),
                     width: 1.5,
                   ),
                 ),
@@ -522,7 +543,9 @@ class _StepBar4 extends StatelessWidget {
                       : Text(
                           '$step',
                           style: TextStyle(
-                            color: active ? GenColors.primary : const Color(0xFF4A5578),
+                            color: active
+                                ? GenColors.primary
+                                : (isDark ? const Color(0xFF4A5578) : const Color(0xFF9CA3AF)),
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
@@ -531,7 +554,7 @@ class _StepBar4 extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                _labels[step - 1],
+                labels[step - 1],
                 style: TextStyle(
                   fontSize: 9,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w400,
@@ -655,6 +678,7 @@ class _MetaStep extends ConsumerWidget {
                     child: _DiffChip(
                       label:    d.displayName,
                       selected: state.defaultDifficulty == d,
+                      isDark:   isDark,
                       color:    d.badgeColor,
                       onTap:    () => notifier.setDefaultDifficulty(d),
                     ),
@@ -665,10 +689,13 @@ class _MetaStep extends ConsumerWidget {
           ),
         ),
         _SubmitBar(
-          label:    'Tiếp theo: Thêm câu hỏi →',
-          enabled:  state.metaValid,
-          gc:       gc,
-          onTap:    onContinue,
+          label:   AppLocalizations.of(context)!.isVi
+              ? 'Tiếp theo: Thêm câu hỏi →'
+              : 'Next: Add Questions →',
+          enabled: state.metaValid,
+          isDark:  isDark,
+          gc:      gc,
+          onTap:   onContinue,
         ),
       ],
     );
@@ -714,8 +741,13 @@ class _AddQuestionsStep extends ConsumerWidget {
         ),
         SafeArea(
           top: false,
-          child: Padding(
+          child: Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0B1020) : Colors.white,
+              border: Border(top: BorderSide(
+                color: isDark ? const Color(0xFF1E2640) : const Color(0xFFE5E7EB))),
+            ),
             child: Row(
               children: [
                 // Add question
@@ -723,10 +755,10 @@ class _AddQuestionsStep extends ConsumerWidget {
                   child: OutlinedButton.icon(
                     onPressed: notifier.addQuestion,
                     icon:  const Icon(Icons.add_circle_outline_rounded, size: 16),
-                    label: const Text('Thêm câu hỏi'),
+                    label: Text(AppLocalizations.of(context)!.isVi ? 'Thêm câu hỏi' : 'Add Question'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: GenColors.primary,
-                      side:  BorderSide(color: GenColors.primary),
+                      side:  const BorderSide(color: GenColors.primary),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -740,13 +772,17 @@ class _AddQuestionsStep extends ConsumerWidget {
                     onPressed: state.hasQuestions ? onContinue : null,
                     style: FilledButton.styleFrom(
                       backgroundColor: GenColors.primary,
-                      disabledBackgroundColor: const Color(0xFF374151),
+                      disabledBackgroundColor: isDark
+                          ? const Color(0xFF2D3562)
+                          : const Color(0xFFE5E7EB),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: Text(
-                      'Xem lại (${state.questions.length})',
+                      AppLocalizations.of(context)!.isVi
+                          ? 'Xem lại (${state.questions.length})'
+                          : 'Review (${state.questions.length})',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -1158,17 +1194,23 @@ class _ReviewStep extends StatelessWidget {
         // Footer
         SafeArea(
           top: false,
-          child: Padding(
+          child: Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0B1020) : Colors.white,
+              border: Border(top: BorderSide(
+                color: isDark ? const Color(0xFF1E2640) : const Color(0xFFE5E7EB))),
+            ),
             child: Row(
               children: [
                 OutlinedButton.icon(
                   onPressed: onBack,
                   icon:  const Icon(Icons.arrow_back_rounded, size: 14),
-                  label: const Text('Sửa'),
+                  label: Text(AppLocalizations.of(context)!.isVi ? 'Sửa' : 'Edit'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF6B7280),
-                    side: const BorderSide(color: Color(0xFF4A5578)),
+                    foregroundColor: isDark ? const Color(0xFF6B7280) : const Color(0xFF374151),
+                    side: BorderSide(
+                      color: isDark ? const Color(0xFF4A5578) : const Color(0xFFD1D5DB)),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                     padding: const EdgeInsets.symmetric(
@@ -1400,12 +1442,14 @@ class _DoneStep extends StatelessWidget {
 class _SubmitBar extends StatelessWidget {
   final String label;
   final bool enabled;
+  final bool isDark;
   final GenColors gc;
   final VoidCallback onTap;
 
   const _SubmitBar({
     required this.label,
     required this.enabled,
+    required this.isDark,
     required this.gc,
     required this.onTap,
   });
@@ -1414,21 +1458,25 @@ class _SubmitBar extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: EdgeInsets.fromLTRB(
             16, 8, 16, 12 + MediaQuery.of(context).padding.bottom),
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Color(0xFF1E2640))),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0B1020) : Colors.white,
+          border: Border(top: BorderSide(
+            color: isDark ? const Color(0xFF1E2640) : const Color(0xFFE5E7EB))),
         ),
         child: SizedBox(
           width: double.infinity,
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: enabled
-                  ? LinearGradient(
-                      colors: [GenColors.primary, const Color(0xFF3B82F6)],
+                  ? const LinearGradient(
+                      colors: [GenColors.primary, Color(0xFF3B82F6)],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     )
-                  : const LinearGradient(
-                      colors: [Color(0xFF374151), Color(0xFF374151)]),
+                  : LinearGradient(
+                      colors: isDark
+                          ? [const Color(0xFF2D3562), const Color(0xFF2D3562)]
+                          : [const Color(0xFFE5E7EB), const Color(0xFFE5E7EB)]),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Material(
@@ -1442,7 +1490,9 @@ class _SubmitBar extends StatelessWidget {
                     label,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: enabled ? Colors.white : const Color(0xFF6B7280),
+                      color: enabled
+                          ? Colors.white
+                          : (isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF)),
                       fontSize:   15,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1568,11 +1618,13 @@ class _InputField extends StatelessWidget {
 class _DiffChip extends StatelessWidget {
   final String label;
   final bool selected;
+  final bool isDark;
   final Color color;
   final VoidCallback onTap;
   const _DiffChip({
     required this.label,
     required this.selected,
+    required this.isDark,
     required this.color,
     required this.onTap,
   });
@@ -1587,14 +1639,16 @@ class _DiffChip extends StatelessWidget {
             color:        selected ? color.withValues(alpha: 0.12) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border:       Border.all(
-              color: selected ? color : const Color(0xFF2D3562),
+              color: selected
+                  ? color
+                  : (isDark ? const Color(0xFF2D3562) : const Color(0xFFE2E4EA)),
               width: selected ? 1.5 : 1,
             ),
           ),
           child: Text(
             label,
             style: TextStyle(
-                color:      selected ? color : const Color(0xFF6B7280),
+                color:      selected ? color : (isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF)),
                 fontSize:   12,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400),
           ),
@@ -1750,4 +1804,110 @@ class _MetaBadge extends StatelessWidget {
                 fontSize:   11,
                 fontWeight: FontWeight.w700)),
       );
+}
+
+// ── Mode Toggle Bar ───────────────────────────────────────────────────────────
+
+class _ModeToggleBar extends StatelessWidget {
+  final bool isDark;
+  const _ModeToggleBar({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Container(
+      color: isDark ? const Color(0xFF0B1020) : Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF111827) : const Color(0xFFF0F1F5),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: isDark ? const Color(0xFF2D3562) : const Color(0xFFE2E4EA),
+          ),
+        ),
+        child: Row(children: [
+          // AI tab (inactive — tap to switch)
+          _ModeTab(
+            icon:   Icons.auto_awesome_rounded,
+            label:  l10n.generateQuestions,
+            active: false,
+            isDark: isDark,
+            onTap:  () => context.go('/hr/generate'),
+          ),
+          // Manual tab (active — current screen)
+          _ModeTab(
+            icon:   Icons.edit_note_rounded,
+            label:  l10n.manualCreate,
+            active: true,
+            isDark: isDark,
+            onTap:  null,
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ModeTab extends StatelessWidget {
+  final IconData icon;
+  final String   label;
+  final bool     active;
+  final bool     isDark;
+  final VoidCallback? onTap;
+  const _ModeTab({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.isDark,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor   = GenColors.primary;
+    final inactiveColor = isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.all(3),
+          decoration: active
+              ? BoxDecoration(
+                  color: isDark ? const Color(0xFF1E2640) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark
+                        ? GenColors.primary.withValues(alpha: 0.35)
+                        : const Color(0xFFE5E7EB),
+                  ),
+                  boxShadow: isDark ? null : [
+                    BoxShadow(
+                      color:      Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4, offset: const Offset(0, 1)),
+                  ],
+                )
+              : null,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14,
+                  color: active ? activeColor : inactiveColor),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color:      active ? activeColor : inactiveColor,
+                  fontSize:   12,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
